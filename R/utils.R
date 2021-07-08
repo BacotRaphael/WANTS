@@ -91,3 +91,26 @@ choice.label2name <- function(list_name, label){
   return(as.character(choices_all[choices_all$list_name==list_name & 
                                     choices_all$`label::english`==label, "name"]))
 }
+
+## Other utils
+
+number.to.arabic <- function(s){
+  arabic <- c("\u0660","\u0661","\u0662","\u0663","\u0664","\u0665","\u0666","\u0667","\u0668","\u0669")
+  english <- c("0","1","2","3","4","5","6","7","8","9")
+  res <- s %>% str_replace_all(setNames(arabic, english))
+  return(res)
+}
+
+arabic.tonumber <- function(s){
+  arabic <- c("\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669\u06F0\u06F1\u06F2\u06F3\u06F4\u06F5\u06F6\u06F7\u06F8\u06F9")
+  english <- c("01234567890123456789")
+  suppressWarnings(res <- lapply(s, function(x) as.numeric(chartr(arabic, english, x))) %>% unlist)
+  res[which(is.na(res))] <- s[which(is.na(res))]
+  return(res)
+}
+
+Modes <- function(x) {
+  ux <- unique(x)
+  tab <- tabulate(match(x, ux))
+  ux[tab == max(tab)]
+}

@@ -9,7 +9,7 @@ today <- Sys.Date()
 
 ## Install/Load libraries
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(tidyverse, stringr, openxlsx, data.table)
+pacman::p_load(tidyverse, stringr, openxlsx, data.table, lubridate)
 pacman::p_load_gh("mabafaba/hypegrammaR", "mabafaba/reachR")
 
 # devtools::install_github("mabafaba/hypegrammaR", force = T, build_vignettes = T)
@@ -121,28 +121,68 @@ for (t in tool.list){
 }
 
 ## Consolidate Common and Cholera datasets together for KI and HHs respectively 
-data_ki <- data_cholera_ki %>% bind_rows(data_common_ki)
-data_hh <- data_cholera_hh %>% bind_rows(data_common_hh)
+data_ki <- data_cholera_ki %>% mutate(tool="cholera", .after = "date_survey") %>% bind_rows(data_common_ki %>% mutate(tool="common")) %>%
+  mutate(tool.cholera=ifelse(tool=="cholera", 1,0))
+data_hh <- data_cholera_hh %>% mutate(tool="cholera", .after = "date_survey") %>% bind_rows(data_common_hh %>% mutate(tool="common")) %>%
+  mutate(tool.cholera=ifelse(tool=="cholera", 1,0))
 
 ## Mutate binary as numerical variable
 cols.num.ki <- c(colnames(data_ki)[grepl("/", colnames(data_ki))])
 data_ki <- data_ki %>% mutate_at(vars(all_of(cols.num.ki)), as.numeric)
-
 cols.num.hh <- c(colnames(data_hh)[grepl("/|infant|child|adult|elderly|hh_member_", colnames(data_hh))], "hh_number")
 data_hh <- data_hh %>% mutate_at(vars(all_of(cols.num.hh)), as.numeric)
 
 ## Match with pcodes 
 metacol <- c("g_governorate","admin1Name_en","admin1Name_ar","g_district","admin2Name_en","admin2Name_ar","g_sub_district","admin3Name_en","admin3Name_ar")
+
 data_ki <- data_ki %>% select(-any_of(c(""))) %>% 
   left_join(pcodes %>% select(admin3Pcode, any_of(metacol)), by = c("g_sub_district"="admin3Pcode")) %>%
   select(all_of(metacol), everything())
-
 data_hh <- data_hh %>% select(-any_of(c(""))) %>%
   left_join(pcodes %>% select(admin3Pcode, any_of(metacol)), by = c("g_sub_district"="admin3Pcode")) %>% 
   select(all_of(metacol), everything())
 
-### 2. Analysis
+### De-identify and rework column names for dashboard
+# Anonymisation 
+col.exclude <- c("g_enum_name", "g_enum_last_name", "g_enum_agency")
+data_hh_anonymised <- data_hh %>% select(-any_of(col.exclude)) 
+data_ki_anonymised <- data_ki %>% select(-any_of(col.exclude))
 
+## Rework column title names  for external dataset
+col.select.one <- c(col.select.one.cholera_hh, col.select.one.cholera_ki, col.select.one.common_hh, col.select.one.common_ki) %>% unique
+col.select.one.binary <- paste0(col.select.one,"/")
+
+## Exclude all the select_one binary columns created for the Indesign data merge to limit column names
+data_hh_ext <- data_hh_anonymised %>% select(-any_of(matches(paste(col.select.one.binary, collapse = "|"))))
+data_ki_ext <- data_ki_anonymised %>% select(-any_of(matches(paste(col.select.one.binary, collapse = "|"))))
+
+# Rename using kobo tool labels for readability
+## Household data
+choices_hh <- choices_common_hh %>% bind_rows(choices_cholera_hh) %>% filter(!duplicated(name),!grepl("\\(|\\)", name))
+tool_hh <- tool_common_hh %>% bind_rows(tool_cholera_hh) %>% filter(!duplicated(name), !is.na(`label::english`))
+data_hh_ext_labels <- data_hh_ext %>% 
+  setNames(colnames(.) %>%
+             str_replace_all(., setNames(tool_hh$`label::english`, tool_hh$name)) %>%
+             str_replace_all(., setNames(choices_hh$`label::english`, choices_hh$name)))
+colnames(data_hh_ext_labels)[is.na(colnames(data_hh_ext_labels))] <- colnames(data_hh_ext)[is.na(colnames(data_hh_ext_labels))]
+
+## Key informant data
+choices_ki <- choices_common_ki %>% bind_rows(choices_cholera_ki) %>% filter(!duplicated(name),!grepl("\\(|\\)", name), !is.na(`label::english`))
+tool_ki <- tool_common_ki %>% bind_rows(tool_cholera_ki) %>% filter(!duplicated(name), !is.na(`label::english`))
+data_ki_ext_labels <- data_ki_ext %>% 
+  setNames(colnames(.) %>%
+             str_replace_all(., setNames(tool_ki$`label::english`, tool_ki$name)) %>%
+             str_replace_all(., setNames(choices_ki$`label::english`, choices_ki$name)))
+colnames(data_ki_ext_labels)[is.na(colnames(data_ki_ext_labels))] <- colnames(data_ki_ext)[is.na(colnames(data_ki_ext_labels))]
+
+## Export all cleaned dataset in xml and labels
+data_hh_ext %>% write.xlsx(paste0("WANTS_data_hh_xml_", today,".xlsx"))
+data_hh_ext_labels %>% write.xlsx(paste0("WANTS_data_hh_labels_", today,".xlsx"))
+
+data_ki_ext %>% write.xlsx(paste0("WANTS_data_ki_xml_", today,".xlsx"))
+data_ki_ext_labels %>% write.xlsx(paste0("WANTS_data_ki_labels_", today,".xlsx"))
+
+### 2. Analysis
 ## 2.0 Load needed functions
 source("R/functions.R")
 source("R/from_hyperanalysis_to_datamerge.R")
@@ -152,7 +192,7 @@ data_hh <- data_hh %>%                                                          
   setnames(old=c("_index","data_uuid"), new=c("index","uuid"), skip_absent = T)
 
 # Load questionnaire, data analysis plan
-questionnaire_hh <- load_questionnaire(data_hh, tool_cholera_hh, choices_cholera_hh, choices.label.column.to.use = "name")
+questionnaire_hh <- hypegrammaR::load_questionnaire(data_hh, tool_cholera_hh, choices_cholera_hh, choices.label.column.to.use = "name")
 dap_hh <- load_analysisplan(analysis.cholera.hh.filename)
 
 # Launch Analysis Script
@@ -163,13 +203,36 @@ summary.stats.list.hh <- analysis_hh$results
 
 # SUMMARY STATS LIST FORMATTED 
 summarystats_hh <- summary.stats.list.hh %>% resultlist_summary_statistics_as_one_table
-write.csv(summarystats_hh, paste0("HH_common_summarystats_final_",today,".csv"), row.names = F)
+
+# Pivot to wide all analysis results
+# final_melted_analysis_hh <- from_hyperanalysis_to_datamerge(summarystats_hh)  # Old function from sourced script, prefer to have it visible in main script if possible
+final_melted_analysis_hh <- summarystats_hh %>%
+  dplyr::rename(district_name=independent.var.value) %>%
+  dplyr::select(-se, -min, -max, -repeat.var, -repeat.var.value, -independent.var) %>%
+  pivot_wider(names_from = c("dependent.var", "dependent.var.value"), 
+              values_from = "numbers") %>%
+  mutate_all(~ifelse(is.na(.), 0, .)) %>%                                       # at district level, assume that each question gets at least one answer => NA should be 0
+  mutate_if(is.numeric, ~round(.*100, 4))                                       # multiply by 100 to get percentages
+
+## join sample size, enumerator agency, governorate, month, year
+data_hh_append <- data_hh %>% group_by(g_district) %>% dplyr::select(g_governorate, g_enum_agency, date_survey) %>%
+  dplyr::summarise_all(Modes) %>%
+  mutate(month = lubridate::month(as.POSIXlt(date_survey, format="%Y-%m-%d"), label=T),
+         year = lubridate::year(as.POSIXlt(date_survey, format="%Y-%m-%d")))
+
+## Get arabic gov, dis + left_join by district => do the same for KI data
+
+final_melted_analysis_hh_ar <- final_melted_analysis_hh %>% mutate_if(is.numeric, number.to.arabic)
+
+write.xlsx(summarystats_hh, paste0("HH_common_summarystats_final_",today,".xlsx"))
+write.xlsx(final_melted_analysis_hh, paste0("HH_common_analysis_final_",today,".xlsx"))
+write.xlsx(final_melted_analysis_hh_ar, paste0("HH_common_analysis_final_ar",today,".xlsx"))
 
 ## 2.2. Analysis for KII level data
 data_ki <- data_ki %>% setnames(old=c("_index","data_uuid"), new=c("index","uuid"), skip_absent = T)
 
 # Load questionnaire and Data Analysis Plan
-questionnaire_ki <- load_questionnaire(data_ki, tool_cholera_ki, choices_cholera_ki, choices.label.column.to.use = "name")
+questionnaire_ki <- hypegrammaR::load_questionnaire(data_ki, tool_cholera_ki, choices_cholera_ki, choices.label.column.to.use = "name")
 dap_ki <- load_analysisplan(analysis.cholera.ki.filename)
 
 # Launch Analysis Script
@@ -180,9 +243,21 @@ summary.stats.list.ki <- analysis_ki$results
 
 # SUMMARY STATS LIST FORMATTED 
 summarystats_ki <- summary.stats.list.ki %>% resultlist_summary_statistics_as_one_table
-write.csv(summarystats_ki, paste0("KI_common_summarystats_final_",today,".csv"), row.names = F)
+final_melted_analysis_ki <- summarystats_ki %>%
+  dplyr::rename(district_name=independent.var.value) %>%
+  dplyr::select(-se, -min, -max, -repeat.var, -repeat.var.value, -independent.var) %>%
+  pivot_wider(names_from = c("dependent.var", "dependent.var.value"), 
+              values_from = "numbers") %>%
+  mutate_all(~ifelse(is.na(.), 0, .)) %>%                                       # at district level, assume that each question gets at least one answer => NA should be 0
+  mutate_if(~is.numeric(.), ~round(.*100, 4))                                       # multiply by 100 to get percentages
 
-# Archived
+final_melted_analysis_ki_ar <- final_melted_analysis_ki %>% mutate_if(is.numeric, number.to.arabic)
+
+write.xlsx(summarystats_ki, paste0("KI_common_summarystats_final_",today,".xlsx"))
+write.xlsx(final_melted_analysis_ki, paste0("KI_common_analysis_final_",today,".xlsx"))
+write.xlsx(final_melted_analysis_ki_ar, paste0("KI_common_analysis_final_ar",today,".xlsx"))
+
+# Archived code
 
 # 1. non looped way of getting all select one columns
 # col.select.one.common_ki <- get.select.db(choices_common_ki, tool_common_ki) %>%
