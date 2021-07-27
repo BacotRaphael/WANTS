@@ -1,5 +1,78 @@
-## Kobo tool and label functions
+## Cleaning log functions
 
+initialise.cleaning.log <- function() {
+  return(data.frame(uuid = as.character(), 
+                    agency = as.character(),
+                    enum_firstname = as.character(), 
+                    enum_lastname = as.character(),
+                    area = as.character(), 
+                    variable = as.character(), 
+                    issue = as.character(),
+                    check_id=as.character(),
+                    old_value = as.character(),
+                    new_value = as.character(), 
+                    fix = as.character(), 
+                    checked_by = as.character()))
+}
+
+add.to.cleaning.log <- function(checks, check_id, question.names=c(), issue="issue", new.value="" , fix="Checked with partner", checked_by="ON", add.col=c("")){
+  df <- initialise.cleaning.log()
+  if (nrow(checks)>0){
+    for(q.n in question.names){
+      new.entries <- checks %>%  filter(flag) %>%
+        mutate(uuid=uuid %>% as.character,
+               enum_firstname=enum_firstname %>% as.character,
+               enum_lastname=enum_lastname %>% as.character,
+               variable=q.n %>% as.character,
+               issue=issue %>% as.character,
+               check_id=check_id %>% as.character,
+               old_value=!!sym(q.n) %>% as.character,
+               new_value=new.value %>% as.character,
+               fix=fix %>% as.character,
+               checked_by= checked_by %>% as.character)
+      new.entries <- new.entries %>% select(all_of(col.cl), any_of(add.col))
+      df <- bind_rows(df, new.entries)
+    }
+    cleaning.log <<- bind_rows(cleaning.log, df %>% arrange(uuid, variable, agency))
+  }
+}
+
+## Cleaning functions
+## 1. Numerical outlier 
+detect.outliers <- function(df, method="sd-linear", n.sd=3, n.iqr=3){
+  res <- data.frame()
+  for (col in colnames(df)[colnames(df)!="uuid"]){
+    df.temp <- data.frame(uuid=df$uuid, value=as.numeric(df[[col]])) %>% filter(!is.na(value) & value>0)
+    if (method=="sd-linear"){
+      df.temp <- df.temp %>%
+        mutate(is.outlier=ifelse(value > mean(value, na.rm=T) + n.sd*sd(value, na.rm=T) | 
+                                   value < mean(value, na.rm=T) - n.sd*sd(value, na.rm=T), T, F))
+    } else if (method=="iqr-linear") {
+      df.temp <- df.temp %>%
+        mutate(col=value,
+               is.outlier=ifelse(col > quantile(col, 0.75) + n.iqr*IQR(col) |
+                                   col < quantile(col, 0.25) - n.iqr*IQR(col), T, F))
+    } else if (method=="sd-log"){
+      df.temp <- df.temp %>%
+        mutate(col.log=log(value),
+               is.outlier=ifelse(col.log > mean(col.log, na.rm=T) + n.sd*sd(col.log, na.rm=T) | 
+                                   col.log < mean(col.log, na.rm=T) - n.sd*sd(col.log, na.rm=T), T, F))
+    } else if (method=="iqr-log") {
+      df.temp <- df.temp %>%
+        mutate(col.log=log(value),
+               is.outlier=ifelse(col.log > quantile(col.log, 0.75) + n.iqr*IQR(col.log) |
+                                   col.log < quantile(col.log, 0.25) - n.iqr*IQR(col.log), T, F))
+    } else stop("Method unknown")
+    df.temp <- filter(df.temp, is.outlier) %>% 
+      mutate(variable=col, old_value=value) %>%
+      select(uuid, variable, old_value)
+    res <- rbind(res, df.temp)
+  }
+  return(res)
+}
+
+
+## Kobo tool and label functions
 get.ref.question <- function(x){
   x.1 <- str_split(x, "\\{")[[1]][2]
   return(str_split(x.1, "\\}")[[1]][1])

@@ -1,6 +1,5 @@
 # WANTS WASH monitoring tool - Data Merge Script
-# REACH Yemen - 
-# District level
+# REACH Yemen  
 # 06/07/2021 - Raphael Bacot - raphael.bacot@reach-initiative.org 
 
 rm(list=ls())
@@ -16,6 +15,10 @@ pacman::p_load_gh("mabafaba/hypegrammaR", "mabafaba/reachR")
 library("hypegrammaR")
 ## Load sourced function
 source("R/utils.R")
+
+## Create directories 
+dir.create("analysis", showWarnings = F)
+dir.create("output", showWarnings = F)
 
 ## Specifcy filenames
 # data.cholera.hh.filename <- "data/WASH_WANTS HH Cholera_cleandata_2021-06-29_corrected.xlsx"
@@ -52,19 +55,25 @@ pcodes <- read.xlsx(filename.pcode, sheet = "admin3")
 
 ## Streamline columns names in dataset and imported kobo tool
 # Clean headers in data
-data_common_hh <- data_common_hh %>% setNames(paste0(gsub("Comm_HH_", "", colnames(.)))) ## Delete Comm_HH_ prefix from column names
-data_cholera_hh <- data_cholera_hh %>% setNames(paste0(gsub("Chol_HH_", "", colnames(.)))) ## Delete Chol_HH_ prefix from column names
-data_common_ki <- data_common_ki %>% setNames(paste0(gsub("\\.", "/", colnames(.)))) ## Replace the choice separator "." with "/" to streamline with others
+data_common_hh <- data_common_hh %>% 
+  setNames(paste0(gsub("Comm_HH_", "", colnames(.)))) %>%                       ## Delete Comm_HH_ prefix from column names
+  setNames(paste0(gsub("/", "\\.", colnames(.))))                               ## Replace the choice separator "/" with "." to streamline headers to PBI dashboard
+data_cholera_hh <- data_cholera_hh %>%
+  setNames(paste0(gsub("Chol_HH_", "", colnames(.)))) %>%                       ## Delete Chol_HH_ prefix from column names
+  setNames(paste0(gsub("/", "\\.", colnames(.)))) 
+data_cholera_ki <- data_cholera_ki %>%
+  setNames(paste0(gsub("/", "\\.", colnames(.))))
+
 # Clean variable names in Kobo tools
 tool_common_hh <- tool_common_hh %>% mutate(name = gsub("Comm_HH_", "", name))
 tool_cholera_hh <- tool_cholera_hh %>% mutate(name = gsub("Chol_HH_", "", name))
 
 # W5.1 How does your household adapt to the lack of water? Recoding choices
 data_common_hh <- data_common_hh %>% 
-  rename(`adapt_lack/less_preferred_drinking`=`adapt_lack/surface_water_other`, # surface_water_other should be less_preferred_drinking
-         `adapt_lack/surface_drinking`=`adapt_lack/surface_water`,              # adapt_lack/surface_water should be adapt_lack/surface_drinking
-         `adapt_lack/less_preferred_other`=`adapt_lack/untreated`,              # untreated should be less_preferred_other
-         `adapt_lack/surface_other`=`adapt_lack/other_surface`) %>%             # other_surface should be surface_other
+  rename(`adapt_lack.less_preferred_drinking`=`adapt_lack.surface_water_other`, # surface_water_other should be less_preferred_drinking
+         `adapt_lack.surface_drinking`=`adapt_lack.surface_water`,              # adapt_lack.surface_water should be adapt_lack.surface_drinking
+         `adapt_lack.less_preferred_other`=`adapt_lack.untreated`,              # untreated should be less_preferred_other
+         `adapt_lack.surface_other`=`adapt_lack.other_surface`) %>%             # other_surface should be surface_other
   mutate(adapt_lack = gsub("surfasurface_waterce_water_other","less_preferred_drinking",
                            gsub("surface_water", "surface_drinking",
                                 gsub("untreated", "less_preferred_other",
@@ -73,8 +82,8 @@ data_common_hh <- data_common_hh %>%
 # data_common_hh %>% pull(adapt_lack) %>% str_split(" ") %>% unlist %>% unique
 
 data_cholera_hh <- data_cholera_hh %>%
-  rename(`adapt_lack/further_source`=`adapt_lack/further`,                      # further should be further_source
-         `adapt_lack/dangerous_source`=`adapt_lack/dangerous`) %>%              # dangerous should be dangerous_source
+  rename(`adapt_lack.further_source`=`adapt_lack.further`,                      # further should be further_source
+         `adapt_lack.dangerous_source`=`adapt_lack.dangerous`) %>%              # dangerous should be dangerous_source
   mutate(adapt_lack = gsub("further", "further_source",
                            gsub("dangerous", "dangerous_source", adapt_lack)))
 # Check Comment if all good
@@ -104,14 +113,13 @@ for (t in tool.list){
 
 # For each select one colum in each dataset, create as many binary columns as choices present in the corresponding kobo tool
 # Can take up to 30 seconds, be patient...
-
 for (t in tool.list){
   values <- choice.long(get(paste0("choices_", t)), get(paste0("tool_", t))) %>% filter(!name %in% c("g_governorate", "g_district", "g_sub_district"))
   for (col in get(paste0("col.select.one.",t))){
     unique.val <- values %>% filter(name==col) %>% pull(value)
     if (length(unique.val)>0 & (col %in% colnames(get(paste0("data_", t))))){
       for (var in unique.val){
-        varname <- paste0(col, "/", var)
+        varname <- paste0(col, ".", var)
         df <- get(paste0("data_", t)) %>%
           mutate(!!sym(varname) := ifelse((is.na(!!sym(col)) | (!!sym(col) %in% c(""))), NA, ifelse(grepl(var, !!sym(col)), "1", "0")), .after=col)
         assign(paste0("data_", t), df)
@@ -122,14 +130,14 @@ for (t in tool.list){
 
 ## Consolidate Common and Cholera datasets together for KI and HHs respectively 
 data_ki <- data_cholera_ki %>% mutate(tool="cholera", .after = "date_survey") %>% bind_rows(data_common_ki %>% mutate(tool="common")) %>%
-  mutate(tool.cholera=ifelse(tool=="cholera", 1,0))
+  mutate(tool_cholera=ifelse(tool=="cholera", 1,0), .after = "tool")
 data_hh <- data_cholera_hh %>% mutate(tool="cholera", .after = "date_survey") %>% bind_rows(data_common_hh %>% mutate(tool="common")) %>%
-  mutate(tool.cholera=ifelse(tool=="cholera", 1,0))
+  mutate(tool_cholera=ifelse(tool=="cholera", 1,0), .after = "tool")
 
 ## Mutate binary as numerical variable
-cols.num.ki <- c(colnames(data_ki)[grepl("/", colnames(data_ki))])
+cols.num.ki <- c(colnames(data_ki)[grepl("\\.", colnames(data_ki))])
 data_ki <- data_ki %>% mutate_at(vars(all_of(cols.num.ki)), as.numeric)
-cols.num.hh <- c(colnames(data_hh)[grepl("/|infant|child|adult|elderly|hh_member_", colnames(data_hh))], "hh_number")
+cols.num.hh <- c(colnames(data_hh)[grepl("\\.|infant|child|adult|elderly|hh_member_", colnames(data_hh))], "hh_number")
 data_hh <- data_hh %>% mutate_at(vars(all_of(cols.num.hh)), as.numeric)
 
 ## Match with pcodes 
@@ -137,10 +145,11 @@ metacol <- c("g_governorate","admin1Name_en","admin1Name_ar","g_district","admin
 
 data_ki <- data_ki %>% select(-any_of(c(""))) %>% 
   left_join(pcodes %>% select(admin3Pcode, any_of(metacol)), by = c("g_sub_district"="admin3Pcode")) %>%
-  select(all_of(metacol), everything())
+  select(all_of(metacol), everything()) %>% mutate(date.month = lubridate::floor_date(as.Date(date_survey, format="%Y-%m-%d"), "month"))
+
 data_hh <- data_hh %>% select(-any_of(c(""))) %>%
   left_join(pcodes %>% select(admin3Pcode, any_of(metacol)), by = c("g_sub_district"="admin3Pcode")) %>% 
-  select(all_of(metacol), everything())
+  select(all_of(metacol), everything()) %>% mutate(date.month = lubridate::floor_date(as.Date(date_survey, format="%Y-%m-%d"), "month"))
 
 ### De-identify and rework column names for dashboard
 # Anonymisation 
@@ -150,7 +159,7 @@ data_ki_anonymised <- data_ki %>% select(-any_of(col.exclude))
 
 ## Rework column title names  for external dataset
 col.select.one <- c(col.select.one.cholera_hh, col.select.one.cholera_ki, col.select.one.common_hh, col.select.one.common_ki) %>% unique
-col.select.one.binary <- paste0(col.select.one,"/")
+col.select.one.binary <- paste0(col.select.one,".")
 
 ## Exclude all the select_one binary columns created for the Indesign data merge to limit column names
 data_hh_ext <- data_hh_anonymised %>% select(-any_of(matches(paste(col.select.one.binary, collapse = "|"))))
@@ -158,29 +167,41 @@ data_ki_ext <- data_ki_anonymised %>% select(-any_of(matches(paste(col.select.on
 
 # Rename using kobo tool labels for readability
 ## Household data
-choices_hh <- choices_common_hh %>% bind_rows(choices_cholera_hh) %>% filter(!duplicated(name),!grepl("\\(|\\)", name))
-tool_hh <- tool_common_hh %>% bind_rows(tool_cholera_hh) %>% filter(!duplicated(name), !is.na(`label::english`))
-data_hh_ext_labels <- data_hh_ext %>% 
-  setNames(colnames(.) %>%
-             str_replace_all(., setNames(tool_hh$`label::english`, tool_hh$name)) %>%
-             str_replace_all(., setNames(choices_hh$`label::english`, choices_hh$name)))
+rep_hh <- bind_rows(tool_common_hh, tool_cholera_hh) %>% mutate(name = paste0("^", name)) %>% 
+  bind_rows(choices_common_hh, choices_cholera_hh) %>%
+  filter(!duplicated(name),!grepl("\\(|\\)", name), !is.na(`label::english`), !is.na(`label::arabic`)) %>%
+  select(name, `label::english`, `label::arabic`) %>% mutate_all(~gsub("\\\\", "-", .)) %>%
+  mutate(name = ifelse(!grepl("\\^", name), paste0(name, "$"), name))
+
+data_hh_ext_labels <- data_hh_ext %>% setNames(colnames(.) %>% str_replace_all(., setNames(rep_hh$`label::english`, rep_hh$name)))
 colnames(data_hh_ext_labels)[is.na(colnames(data_hh_ext_labels))] <- colnames(data_hh_ext)[is.na(colnames(data_hh_ext_labels))]
 
+data_hh_ext_labels_ar <- data_hh_ext %>%  # In case column names needed in arabic 
+  setNames(colnames(.) %>% str_replace_all(., setNames(rep_hh$`label::arabic`, rep_hh$name)))
+colnames(data_hh_ext_labels_ar)[is.na(colnames(data_hh_ext_labels_ar))] <- colnames(data_hh_ext)[is.na(colnames(data_hh_ext_labels_ar))]
+
 ## Key informant data
-choices_ki <- choices_common_ki %>% bind_rows(choices_cholera_ki) %>% filter(!duplicated(name),!grepl("\\(|\\)", name), !is.na(`label::english`))
-tool_ki <- tool_common_ki %>% bind_rows(tool_cholera_ki) %>% filter(!duplicated(name), !is.na(`label::english`))
-data_ki_ext_labels <- data_ki_ext %>% 
-  setNames(colnames(.) %>%
-             str_replace_all(., setNames(tool_ki$`label::english`, tool_ki$name)) %>%
-             str_replace_all(., setNames(choices_ki$`label::english`, choices_ki$name)))
+rep_ki <- bind_rows(tool_common_ki, tool_cholera_ki) %>% mutate(name = paste0("^", name)) %>%
+  bind_rows(choices_common_ki, choices_cholera_ki) %>%
+  filter(!duplicated(name),!grepl("\\(|\\)", name), !is.na(`label::english`), !is.na(`label::arabic`)) %>%
+  select(name, `label::english`, `label::arabic`) %>% mutate_all(~gsub("\\\\", "-", .)) %>%
+  mutate(name = ifelse(!grepl("\\^", name), paste0(name, "$"), name))
+
+data_ki_ext_labels <- data_ki_ext %>% setNames(colnames(.) %>% str_replace_all(., setNames(rep_ki$`label::english`, rep_ki$name)))
 colnames(data_ki_ext_labels)[is.na(colnames(data_ki_ext_labels))] <- colnames(data_ki_ext)[is.na(colnames(data_ki_ext_labels))]
 
-## Export all cleaned dataset in xml and labels
-data_hh_ext %>% write.xlsx(paste0("WANTS_data_hh_xml_", today,".xlsx"))
-data_hh_ext_labels %>% write.xlsx(paste0("WANTS_data_hh_labels_", today,".xlsx"))
+data_ki_ext_labels_ar <- data_ki_ext %>% # In case column names needed in arabic 
+  setNames(colnames(.) %>% str_replace_all(., setNames(rep_ki$`label::arabic`, rep_ki$name))) 
+colnames(data_ki_ext_labels_ar)[is.na(colnames(data_ki_ext_labels_ar))] <- colnames(data_ki_ext)[is.na(colnames(data_ki_ext_labels_ar))]
 
-data_ki_ext %>% write.xlsx(paste0("WANTS_data_ki_xml_", today,".xlsx"))
-data_ki_ext_labels %>% write.xlsx(paste0("WANTS_data_ki_labels_", today,".xlsx"))
+## Export all cleaned dataset in xml and labels
+data_hh_ext %>% write.xlsx(paste0("output/WANTS_data_hh_xml_", today,".xlsx"))
+data_hh_ext_labels %>% write.xlsx(paste0("output/WANTS_data_hh_labels_", today,".xlsx"))
+data_hh_ext_labels_ar %>% write.xlsx(paste0("output/WANTS_data_hh_labels_ar_", today,".xlsx"))
+
+data_ki_ext %>% write.xlsx(paste0("output/WANTS_data_ki_xml_", today,".xlsx"))
+data_ki_ext_labels %>% write.xlsx(paste0("output/WANTS_data_ki_labels_", today,".xlsx"))
+data_ki_ext_labels_ar %>% write.xlsx(paste0("output/WANTS_data_ki_labels_ar_", today,".xlsx"))
 
 ### 2. Analysis
 ## 2.0 Load needed functions
@@ -206,7 +227,7 @@ summarystats_hh <- summary.stats.list.hh %>% resultlist_summary_statistics_as_on
 
 # Pivot to wide all analysis results
 # final_melted_analysis_hh <- from_hyperanalysis_to_datamerge(summarystats_hh)  # Old function from sourced script, prefer to have it visible in main script if possible
-final_melted_analysis_hh <- summarystats_hh %>%
+melted_analysis_hh <- summarystats_hh %>%
   dplyr::rename(district_name=independent.var.value) %>%
   dplyr::select(-se, -min, -max, -repeat.var, -repeat.var.value, -independent.var) %>%
   pivot_wider(names_from = c("dependent.var", "dependent.var.value"), 
@@ -218,15 +239,20 @@ final_melted_analysis_hh <- summarystats_hh %>%
 data_hh_append <- data_hh %>% group_by(g_district) %>% dplyr::select(g_governorate, g_enum_agency, date_survey) %>%
   dplyr::summarise_all(Modes) %>%
   mutate(month = lubridate::month(as.POSIXlt(date_survey, format="%Y-%m-%d"), label=T),
-         year = lubridate::year(as.POSIXlt(date_survey, format="%Y-%m-%d")))
+         year = lubridate::year(as.POSIXlt(date_survey, format="%Y-%m-%d"))) %>%
+  left_join(data_hh %>% group_by(g_district) %>% summarise(sample_size=n()), by="g_district")
 
 ## Get arabic gov, dis + left_join by district => do the same for KI data
+final_melted_analysis_hh <- melted_analysis_hh %>%
+  left_join(pcodes %>% select(admin2Pcode, any_of(metacol)), by = c("district_name"="admin2Pcode")) %>%
+  left_join(data_hh_append, by=c("district_name"="g_district")) %>%
+  select(any_of(metacol), any_of(colnames(data_hh_append)), everything())
 
 final_melted_analysis_hh_ar <- final_melted_analysis_hh %>% mutate_if(is.numeric, number.to.arabic)
 
-write.xlsx(summarystats_hh, paste0("HH_common_summarystats_final_",today,".xlsx"))
-write.xlsx(final_melted_analysis_hh, paste0("HH_common_analysis_final_",today,".xlsx"))
-write.xlsx(final_melted_analysis_hh_ar, paste0("HH_common_analysis_final_ar",today,".xlsx"))
+write.xlsx(summarystats_hh, paste0("analysis/HH_common_summarystats_final_",today,".xlsx"))
+write.xlsx(final_melted_analysis_hh, paste0("analysis/HH_common_analysis_final_",today,".xlsx"))
+write.xlsx(final_melted_analysis_hh_ar, paste0("analysis/HH_common_analysis_final_ar",today,".xlsx"))
 
 ## 2.2. Analysis for KII level data
 data_ki <- data_ki %>% setnames(old=c("_index","data_uuid"), new=c("index","uuid"), skip_absent = T)
@@ -243,7 +269,7 @@ summary.stats.list.ki <- analysis_ki$results
 
 # SUMMARY STATS LIST FORMATTED 
 summarystats_ki <- summary.stats.list.ki %>% resultlist_summary_statistics_as_one_table
-final_melted_analysis_ki <- summarystats_ki %>%
+melted_analysis_ki <- summarystats_ki %>%
   dplyr::rename(district_name=independent.var.value) %>%
   dplyr::select(-se, -min, -max, -repeat.var, -repeat.var.value, -independent.var) %>%
   pivot_wider(names_from = c("dependent.var", "dependent.var.value"), 
@@ -251,11 +277,24 @@ final_melted_analysis_ki <- summarystats_ki %>%
   mutate_all(~ifelse(is.na(.), 0, .)) %>%                                       # at district level, assume that each question gets at least one answer => NA should be 0
   mutate_if(~is.numeric(.), ~round(.*100, 4))                                       # multiply by 100 to get percentages
 
+## join sample size, enumerator agency, governorate, month, year
+data_ki_append <- data_ki %>% group_by(g_district) %>% dplyr::select(g_governorate, g_enum_agency, date_survey) %>%
+  dplyr::summarise_all(Modes) %>%
+  mutate(month = lubridate::month(as.POSIXlt(date_survey, format="%Y-%m-%d"), label=T),
+         year = lubridate::year(as.POSIXlt(date_survey, format="%Y-%m-%d"))) %>%
+  left_join(data_ki %>% group_by(g_district) %>% summarise(sample_size=n()), by="g_district")
+
+## Get arabic gov, dis + left_join by district => do the same for KI data
+final_melted_analysis_ki <- melted_analysis_ki %>%
+  left_join(pcodes %>% select(admin2Pcode, any_of(metacol)), by = c("district_name"="admin2Pcode")) %>%
+  left_join(data_ki_append, by=c("district_name"="g_district")) %>%
+  select(any_of(metacol), any_of(colnames(data_ki_append)), everything())
+
 final_melted_analysis_ki_ar <- final_melted_analysis_ki %>% mutate_if(is.numeric, number.to.arabic)
 
-write.xlsx(summarystats_ki, paste0("KI_common_summarystats_final_",today,".xlsx"))
-write.xlsx(final_melted_analysis_ki, paste0("KI_common_analysis_final_",today,".xlsx"))
-write.xlsx(final_melted_analysis_ki_ar, paste0("KI_common_analysis_final_ar",today,".xlsx"))
+write.xlsx(summarystats_ki, paste0("analysis/KI_common_summarystats_final_",today,".xlsx"))
+write.xlsx(final_melted_analysis_ki, paste0("analysis/KI_common_analysis_final_",today,".xlsx"))
+write.xlsx(final_melted_analysis_ki_ar, paste0("analysis/KI_common_analysis_final_ar",today,".xlsx"))
 
 # Archived code
 
