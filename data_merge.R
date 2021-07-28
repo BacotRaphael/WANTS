@@ -80,6 +80,11 @@ data_common_hh <- data_common_hh %>%
                                      gsub("other_surface", "surface_other", adapt_lack)))))
 # Check Comment if all good
 # data_common_hh %>% pull(adapt_lack) %>% str_split(" ") %>% unlist %>% unique
+choices_common_hh <- choices_common_hh %>% 
+  mutate(name = gsub("surface_water_other","less_preferred_drinking",
+                     gsub("surface_water", "surface_drinking",
+                          gsub("untreated", "less_preferred_other",
+                               gsub("other_surface", "surface_other", name)))))
 
 data_cholera_hh <- data_cholera_hh %>%
   rename(`adapt_lack.further_source`=`adapt_lack.further`,                      # further should be further_source
@@ -88,11 +93,19 @@ data_cholera_hh <- data_cholera_hh %>%
                            gsub("dangerous", "dangerous_source", adapt_lack)))
 # Check Comment if all good
 # data_cholera_hh %>% pull(adapt_lack) %>% str_split(" ") %>% unlist %>% unique
+choices_common_hh <- choices_common_hh %>%
+  mutate(name = gsub("further", "further_source",
+                     gsub("dangerous", "dangerous_source", name)))
 
 ## Renaming for the KI datasets !! ORDER DEPENDENT, Don't switch order of line 79 and 80 !!
 data_cholera_ki <- data_cholera_ki %>% 
   rename(w_waterneeds=w_watersmell,                                             # Renaming wrongly named columns in data cholera KI tool (shifted)
          w_watersmell=w_waterquality_what)                                      # Renaming wrongly named columns in data cholera KI tool (shifted)
+
+## Update the tool accordingly 
+tool_cholera_ki <- tool_cholera_ki %>% 
+  mutate(name=gsub("^watersmell$", "w_waterneeds", name),
+         name=gsub("^w_waterquality_what$", "watersmell", name))
 
 ## Compare columns from different tools
 col_cholera_hh = data.frame(id=colnames(data_cholera_hh), col_cholera_hh=colnames(data_cholera_hh))
@@ -102,20 +115,21 @@ col_common_ki = data.frame(id=colnames(data_common_ki), col_common_ki=colnames(d
 
 col.all <- col_cholera_hh %>% full_join(col_cholera_ki, by = "id") %>% full_join(col_common_hh, by="id") %>% full_join(col_common_ki, by="id") %>% rename(question_header=id)
 
-## For all dataset, create as many binary column as choices for all select_one questions
+## For all dataset, create as many binary column as choices for all select_one questions 
+#  To be done => get also the select multiple columns binary
 # Get the list of all select one columns for all datasets
 tool.list <- gsub("\\.", "_", tools)
+
 for (t in tool.list){
-  assign(paste0("col.select.one.", t), 
-         get.select.db(get(paste0("choices_", t)), get(paste0("tool_", t))) %>%
-           filter(q.type=="select_one", !(name %in% c("g_enum_agency", "g_governorate", "g_district", "g_sub_district", "x_form"))) %>% pull(name))
+  assign(paste0("col.select.one.", t), get(paste0("tool_", t)) %>% filter(grepl("select_one", type)) %>% pull(name))
+  assign(paste0("col.select.multiple.", t), get(paste0("tool_", t)) %>% filter(grepl("select_multiple", type)) %>% pull(name))
 }
 
-# For each select one colum in each dataset, create as many binary columns as choices present in the corresponding kobo tool
+# For each select one/multiple colum in each dataset, create as many binary columns as choices present in the corresponding kobo tool
 # Can take up to 30 seconds, be patient...
 for (t in tool.list){
   values <- choice.long(get(paste0("choices_", t)), get(paste0("tool_", t))) %>% filter(!name %in% c("g_governorate", "g_district", "g_sub_district"))
-  for (col in get(paste0("col.select.one.",t))){
+  for (col in c(get(paste0("col.select.one.",t)), get(paste0("col.select.multiple.",t)))){
     unique.val <- values %>% filter(name==col) %>% pull(value)
     if (length(unique.val)>0 & (col %in% colnames(get(paste0("data_", t))))){
       for (var in unique.val){
@@ -153,7 +167,7 @@ data_hh <- data_hh %>% select(-any_of(c(""))) %>%
 
 ### De-identify and rework column names for dashboard
 # Anonymisation 
-col.exclude <- c("g_enum_name", "g_enum_last_name", "g_enum_agency")
+col.exclude <- c("g_enum_name", "g_enum_last_name", "g_enum_agency")            # to be updated
 data_hh_anonymised <- data_hh %>% select(-any_of(col.exclude)) 
 data_ki_anonymised <- data_ki %>% select(-any_of(col.exclude))
 
@@ -162,6 +176,7 @@ col.select.one <- c(col.select.one.cholera_hh, col.select.one.cholera_ki, col.se
 col.select.one.binary <- paste0(col.select.one,".")
 
 ## Exclude all the select_one binary columns created for the Indesign data merge to limit column names
+# separate between the binaries from select one and select multiples
 data_hh_ext <- data_hh_anonymised %>% select(-any_of(matches(paste(col.select.one.binary, collapse = "|"))))
 data_ki_ext <- data_ki_anonymised %>% select(-any_of(matches(paste(col.select.one.binary, collapse = "|"))))
 
@@ -194,7 +209,11 @@ data_ki_ext_labels_ar <- data_ki_ext %>% # In case column names needed in arabic
   setNames(colnames(.) %>% str_replace_all(., setNames(rep_ki$`label::arabic`, rep_ki$name))) 
 colnames(data_ki_ext_labels_ar)[is.na(colnames(data_ki_ext_labels_ar))] <- colnames(data_ki_ext)[is.na(colnames(data_ki_ext_labels_ar))]
 
-## Export all cleaned dataset in xml and labels
+## Export all cleaned dataset for InDesign
+data_hh_anonymised %>% write.xlsx(paste0("output/WANTS_data_hh_inDesign", today, ".xlsx"))
+data_ki_anonymised %>% write.xlsx(paste0("output/WANTS_data_ki_inDesign", today, ".xlsx"))
+  
+## Export all cleaned dataset in xml and labels - Not for inDesign
 data_hh_ext %>% write.xlsx(paste0("output/WANTS_data_hh_xml_", today,".xlsx"))
 data_hh_ext_labels %>% write.xlsx(paste0("output/WANTS_data_hh_labels_", today,".xlsx"))
 data_hh_ext_labels_ar %>% write.xlsx(paste0("output/WANTS_data_hh_labels_ar_", today,".xlsx"))
@@ -202,6 +221,18 @@ data_hh_ext_labels_ar %>% write.xlsx(paste0("output/WANTS_data_hh_labels_ar_", t
 data_ki_ext %>% write.xlsx(paste0("output/WANTS_data_ki_xml_", today,".xlsx"))
 data_ki_ext_labels %>% write.xlsx(paste0("output/WANTS_data_ki_labels_", today,".xlsx"))
 data_ki_ext_labels_ar %>% write.xlsx(paste0("output/WANTS_data_ki_labels_ar_", today,".xlsx"))
+
+## Split Common and CHolera for HH and KI and export it with the relevant name for PBI
+
+data_common_hh_dashboard <- data_hh_ext %>% filter(tool=="common")
+data_common_hh_dashboard %>% write.xlsx(paste0("output/WANTS_data_common_hh_dashboard_", today, ".xlsx"))
+data_cholera_hh_dashboard <- data_hh_ext %>% filter(tool=="common")
+data_cholera_hh_dashboard %>% write.xlsx(paste0("output/WANTS_data_cholera_hh_dashboard_", today, ".xlsx"))
+
+data_common_ki_dashboard <- data_ki_ext %>% filter(tool=="common")
+data_common_ki_dashboard %>% write.xlsx(paste0("output/WANTS_data_common_ki_dashboard_", today, ".xlsx"))
+data_cholera_ki_dashboard <- data_ki_ext %>% filter(tool=="common")
+data_cholera_ki_dashboard %>% write.xlsx(paste0("output/WANTS_data_cholera_ki_dashboard_", today, ".xlsx"))
 
 ### 2. Analysis
 ## 2.0 Load needed functions
@@ -218,16 +249,11 @@ dap_hh <- load_analysisplan(analysis.cholera.hh.filename)
 
 # Launch Analysis Script
 analysis_hh <- from_analysisplan_map_to_output(data = data_hh, analysisplan = dap_hh, weighting = NULL, questionnaire = questionnaire_hh, labeled = TRUE)
+summary.stats.list.hh <- analysis_hh$results                                    # SUMMARY STATS LIST ##
+summarystats_hh <- summary.stats.list.hh %>% resultlist_summary_statistics_as_one_table # SUMMARY STATS LIST FORMATTED
 
-# SUMMARY STATS LIST ##
-summary.stats.list.hh <- analysis_hh$results
-
-# SUMMARY STATS LIST FORMATTED 
-summarystats_hh <- summary.stats.list.hh %>% resultlist_summary_statistics_as_one_table
-
-# Pivot to wide all analysis results
 # final_melted_analysis_hh <- from_hyperanalysis_to_datamerge(summarystats_hh)  # Old function from sourced script, prefer to have it visible in main script if possible
-melted_analysis_hh <- summarystats_hh %>%
+melted_analysis_hh <- summarystats_hh %>%                                       # Pivot to wide all analysis results
   dplyr::rename(district_name=independent.var.value) %>%
   dplyr::select(-se, -min, -max, -repeat.var, -repeat.var.value, -independent.var) %>%
   pivot_wider(names_from = c("dependent.var", "dependent.var.value"), 
@@ -236,10 +262,17 @@ melted_analysis_hh <- summarystats_hh %>%
   mutate_if(is.numeric, ~round(.*100, 4))                                       # multiply by 100 to get percentages
 
 ## join sample size, enumerator agency, governorate, month, year
+ncol_agency <- data_hh %>% group_by(g_district) %>% summarise(n = length(unique(g_enum_agency))) %>% filter(n==max(n)) %>% pull(n) %>% unique
+agency.cols <- paste0("g_enum_agency_", 1:ncol_agency)
 data_hh_append <- data_hh %>% group_by(g_district) %>% dplyr::select(g_governorate, g_enum_agency, date_survey) %>%
-  dplyr::summarise_all(Modes) %>%
-  mutate(month = lubridate::month(as.POSIXlt(date_survey, format="%Y-%m-%d"), label=T),
-         year = lubridate::year(as.POSIXlt(date_survey, format="%Y-%m-%d"))) %>%
+  mutate(date_survey=lubridate::floor_date(as.Date(date_survey, format="%Y-%m-%d"), "month")) %>%
+  dplyr::summarise_all(~paste(unique(.), collapse = " ")) %>% 
+  mutate(date_survey=str_split(date_survey, " ")[[1]],
+         month = lubridate::month(as.POSIXlt(date_survey, format="%Y-%m-%d"), label=T),
+         year = lubridate::year(as.POSIXlt(date_survey, format="%Y-%m-%d")))
+for (i in seq_along(1:length(agency.cols))){                                    # mutate as many agency columns as agency per district
+  data_hh_append <- data_hh_append %>% mutate(!!sym(agency.cols[i]) := lapply(g_enum_agency, function(x) get.element(x, i)))}
+data_hh_append <- data_hh_append %>% select(-g_enum_agency) %>% 
   left_join(data_hh %>% group_by(g_district) %>% summarise(sample_size=n()), by="g_district")
 
 ## Get arabic gov, dis + left_join by district => do the same for KI data
@@ -250,7 +283,7 @@ final_melted_analysis_hh <- melted_analysis_hh %>%
 
 final_melted_analysis_hh_ar <- final_melted_analysis_hh %>% mutate_if(is.numeric, number.to.arabic)
 
-write.xlsx(summarystats_hh, paste0("analysis/HH_common_summarystats_final_",today,".xlsx"))
+# write.xlsx(summarystats_hh, paste0("analysis/HH_common_summarystats_final_",today,".xlsx"))
 write.xlsx(final_melted_analysis_hh, paste0("analysis/HH_common_analysis_final_",today,".xlsx"))
 write.xlsx(final_melted_analysis_hh_ar, paste0("analysis/HH_common_analysis_final_ar",today,".xlsx"))
 
@@ -263,12 +296,9 @@ dap_ki <- load_analysisplan(analysis.cholera.ki.filename)
 
 # Launch Analysis Script
 analysis_ki <- from_analysisplan_map_to_output(data = data_ki, analysisplan = dap_ki, weighting = NULL, questionnaire = questionnaire_ki, labeled = TRUE)
+summary.stats.list.ki <- analysis_ki$results                                    # SUMMARY STATS LIST ##
+summarystats_ki <- summary.stats.list.ki %>% resultlist_summary_statistics_as_one_table # SUMMARY STATS LIST FORMATTED 
 
-# SUMMARY STATS LIST ##
-summary.stats.list.ki <- analysis_ki$results
-
-# SUMMARY STATS LIST FORMATTED 
-summarystats_ki <- summary.stats.list.ki %>% resultlist_summary_statistics_as_one_table
 melted_analysis_ki <- summarystats_ki %>%
   dplyr::rename(district_name=independent.var.value) %>%
   dplyr::select(-se, -min, -max, -repeat.var, -repeat.var.value, -independent.var) %>%
@@ -278,10 +308,17 @@ melted_analysis_ki <- summarystats_ki %>%
   mutate_if(~is.numeric(.), ~round(.*100, 4))                                       # multiply by 100 to get percentages
 
 ## join sample size, enumerator agency, governorate, month, year
+ncol_agency <- data_ki %>% group_by(g_district) %>% summarise(n = length(unique(g_enum_agency))) %>% filter(n==max(n)) %>% pull(n) %>% unique
+agency.cols <- paste0("g_enum_agency_", 1:ncol_agency)
 data_ki_append <- data_ki %>% group_by(g_district) %>% dplyr::select(g_governorate, g_enum_agency, date_survey) %>%
-  dplyr::summarise_all(Modes) %>%
-  mutate(month = lubridate::month(as.POSIXlt(date_survey, format="%Y-%m-%d"), label=T),
-         year = lubridate::year(as.POSIXlt(date_survey, format="%Y-%m-%d"))) %>%
+  mutate(date_survey=lubridate::floor_date(as.Date(date_survey, format="%Y-%m-%d"), "month")) %>%
+  dplyr::summarise_all(~paste(unique(.), collapse = " ")) %>% 
+  mutate(date_survey=str_split(date_survey, " ")[[1]],
+         month = lubridate::month(as.POSIXlt(date_survey, format="%Y-%m-%d"), label=T),
+         year = lubridate::year(as.POSIXlt(date_survey, format="%Y-%m-%d")))
+for (i in seq_along(1:length(agency.cols))){                                    # mutate as many agency columns as agency per district
+  data_ki_append <- data_ki_append %>% mutate(!!sym(agency.cols[i]) := lapply(g_enum_agency, function(x) get.element(x, i)))}
+data_ki_append <- data_ki_append %>% select(-g_enum_agency) %>% 
   left_join(data_ki %>% group_by(g_district) %>% summarise(sample_size=n()), by="g_district")
 
 ## Get arabic gov, dis + left_join by district => do the same for KI data
@@ -320,3 +357,4 @@ write.xlsx(final_melted_analysis_ki_ar, paste0("analysis/KI_common_analysis_fina
 #     }
 #   }
 # }
+  
