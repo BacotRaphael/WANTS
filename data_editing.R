@@ -39,6 +39,7 @@ for (t in tools) {
   assign(paste0("tool_", gsub("\\.", "_", t)), read.xlsx(paste0("kobo.", t, ".filename") %>% get) %>% mutate_all(as.character))
   assign(paste0("choices_", gsub("\\.", "_", t)), read.xlsx(paste0("kobo.", t, ".filename") %>% get, sheet = "choices") %>% mutate_all(as.character))
 }
+
 pcodes <- read.xlsx(filename.pcode, sheet = "admin3")
 
 tool_hh <- bind_rows(tool_cholera_hh, tool_common_hh) %>% filter(!duplicated(name))
@@ -47,16 +48,46 @@ choices_hh <- bind_rows(choices_cholera_hh, choices_common_hh) %>% filter(!dupli
 tool_ki <- bind_rows(tool_cholera_ki, tool_common_ki) %>% filter(!duplicated(name))
 choices_ki <- bind_rows(choices_cholera_ki, choices_common_ki) %>% filter(!duplicated(paste0(list_name,name)))
 
+## Rename _uuid _index and mutate id in case of duplicates
+list_df <- lapply(paste0("data_", gsub("\\.", "_", tools)), get)
+names(list_df) <- paste0("data_", gsub("\\.", "_", tools))
+list_df <- lapply(list_df, function(x) x <- x %>% setnames(old = c("_uuid", "_index", "NO"), new = c("uuid", "index", "number"), skip_absent = T) %>% mutate(id=1:nrow(.)) %>% select(id, uuid, everything()))
+mapply(function(x,y) assign(x,y, .GlobalEnv), names(list_df), list_df)
+# for (i in seq_along(1:length(list_df))){assign(names(list_df)[i], list_df[[i]])}
+
 ## 1.2. Streamline columns names in dataset and imported kobo tool and consolidate common and cholera datset for HH and KI
-
-# harmonise.and.consolidate.datasets()                                          ## 1. harmonise and consolidate both HH and KI at the same time
-
+### Note: This section will align column names and choices and create a consolidate dataset (the first function creates data_hh, the second will create data_ki)
 harmonise.consolidate.hh()                                                      ## 2. harmonise and consolidate common and cholera HH 
-
 harmonise.consolidate.ki()                                                      ## 3. harmonise and consolidate common and cholera HH
+# harmonise.and.consolidate.datasets()                                          ## 1. original function that cleans HH and KI at once
 
-## Load cleaning logs
+################################################################################################
+## 2. Apply changes from updated cleaning logs
+################################################################################################
+# tool.type <- "HH"
+tool.type <- "KI"
+tool <- tolower(tool.type)
+if (tool.type=="HH"){data <- data_hh} else {data <- data_ki}
 
+## 2.1. Load cleaning logs from all partners
+dir.create("cleaning/partners feedback", showWarnings = F)
+dir.create("cleaning/partners feedback/hh", showWarnings = F)
+dir.create("cleaning/partners feedback/ki", showWarnings = F)
+updated.cl.files <- list.files(paste0("cleaning/partners feedback/", tool))
+cleaning.log <- lapply(updated.cl.files, function(x) read.xlsx(paste0("cleaning/partners feedback/",tool,"/", x)) %>% mutate_all(as.character)) %>% bind_rows
+
+## 2.2. Apply changes from cleaning log
+data_cleaned <- data
+for (r in seq_along(1:nrow(cleaning.log))){
+  variable <- cleaning.log[r, "variable"]
+  if (variable %in% colnames(data_cleaned)){data_cleaned[data_cleaned$uuid %in% cleaning.log[r, "uuid"], variable] <- cleaning.log[r, "new_value"]}
+  }
+
+## 2.3. Write cleaned datasets
+dir.create("output/data cleaned", showWarnings = F)
+data_cleaned %>% write.xlsx(paste0("output/data cleaned/data_cleaned_", tool.type, "_", today, ".xlsx"))
+data_cleaned %>% filter(tool == "common") %>% write.xlsx(paste0("output/data cleaned/data_cleaned_common", tool.type, "_", today, ".xlsx"))
+data_cleaned %>% filter(tool == "cholera") %>% write.xlsx(paste0("output/data cleaned/data_cleaned_cholera", tool.type, "_", today, ".xlsx"))
 
 
 

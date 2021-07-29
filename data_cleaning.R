@@ -30,7 +30,7 @@ filename.pcode <- "data/yem_admin_ochayemen_20191002.xlsx"
 source("R/utils.R")
 
 ################################################################################################
-## 1. Load and consolidate datsets
+## 1. Load and consolidate datasets
 ################################################################################################
 ## 1.1. Load all raw datasets
 tools <- c("cholera.hh", "cholera.ki", "common.hh", "common.ki")                # Make sure that the list of tools here match the filenames above
@@ -41,21 +41,13 @@ for (t in tools) {
 }
 pcodes <- read.xlsx(filename.pcode, sheet = "admin3")
 
-tool_hh <- bind_rows(tool_cholera_hh, tool_common_hh) %>% filter(!duplicated(name))
-choices_hh <- bind_rows(choices_cholera_hh, choices_common_hh) %>% filter(!duplicated(paste0(list_name,name)))
-
-tool_ki <- bind_rows(tool_cholera_ki, tool_common_ki) %>% filter(!duplicated(name))
-choices_ki <- bind_rows(choices_cholera_ki, choices_common_ki) %>% filter(!duplicated(paste0(list_name,name)))
-
 ## 1.2. Streamline columns names in dataset and imported kobo tool and consolidate common and cholera datset for HH and KI
-
-# harmonise.and.consolidate.datasets()                                          ## 1. harmonise and consolidate both HH and KI at the same time
-
+### Note: This section will align column names and choices and create a consolidate dataset (the first function creates data_hh, the second will create data_ki)
 harmonise.consolidate.hh()                                                      ## 2. harmonise and consolidate common and cholera HH 
-
 harmonise.consolidate.ki()                                                      ## 3. harmonise and consolidate common and cholera HH
+# harmonise.and.consolidate.datasets()                                          ## 1. original function that cleans HH and KI at once
 
-## 1.2.5. Compare columns from different tools
+## 1.3 Compare columns from different tools
 col_cholera_hh = data.frame(id=colnames(data_cholera_hh), col_cholera_hh=colnames(data_cholera_hh))
 col_cholera_ki = data.frame(id=colnames(data_cholera_ki), col_cholera_ki=colnames(data_cholera_ki))
 col_common_hh = data.frame(id=colnames(data_common_hh), col_common_hh=colnames(data_common_hh))
@@ -63,11 +55,22 @@ col_common_ki = data.frame(id=colnames(data_common_ki), col_common_ki=colnames(d
 
 col.all <- col_cholera_hh %>% full_join(col_cholera_ki, by = "id") %>% full_join(col_common_hh, by="id") %>% full_join(col_common_ki, by="id") %>% rename(question_header=id)
 
-## Mutate binary as numerical variable
+## 1.4 Mutate binary as numerical variable
 cols.num.ki <- c(colnames(data_ki)[grepl("\\.", colnames(data_ki))])
 data_ki <- data_ki %>% mutate_at(vars(all_of(cols.num.ki)), as.numeric)
 cols.num.hh <- c(colnames(data_hh)[grepl("\\.|infant|child|adult|elderly|hh_member_", colnames(data_hh))], "hh_number")
 data_hh <- data_hh %>% mutate_at(vars(all_of(cols.num.hh)), as.numeric)
+
+## 1.5 Consolidate common and HH updated tools [for data validation when exporting cleaning log]
+## If there are changes to the tool, run 2 lines below [will allow flag potential questions that have different wording/choices but same column name]
+# tool_hh <- bind_rows(tool_cholera_hh, tool_common_hh) %>% filter(!type %in% c("begin_group", "end_group", "image")) %>% group_by(name) %>% mutate(n=n()) %>% arrange(-n, name)
+# tool_ki <- bind_rows(tool_cholera_ki, tool_common_ki)  %>% filter(!type %in% c("begin_group", "end_group", "image")) %>% group_by(name) %>% mutate(n=n()) %>% arrange(-n, name)
+
+tool_hh <- bind_rows(tool_cholera_hh, tool_common_hh) %>% filter(!duplicated(name))
+choices_hh <- bind_rows(choices_cholera_hh, choices_common_hh) %>% filter(!duplicated(paste0(list_name,name)))
+
+tool_ki <- bind_rows(tool_cholera_ki, tool_common_ki) %>% filter(!duplicated(name))
+choices_ki <- bind_rows(choices_cholera_ki, choices_common_ki) %>% filter(!duplicated(paste0(list_name,name)))
 
 ################################################################################################
 ## 2. Cleaning
@@ -139,6 +142,8 @@ data <- data %>% select(-any_of(c(""))) %>%
   left_join(pcodes %>% select(admin3Pcode, any_of(metacol)), by = c("g_sub_district"="admin3Pcode")) %>%
   select(all_of(metacol), everything())
 
+## 2.2. Checking agency name (TBD)
+
 ## 2.2. Shortest path check 
 C <- 2.5  # parameter to calibrate to determine tool specific NA threshold starting which surveys will be flagged [IQR rule] 
 check_shortest_path <- data %>% mutate(CountNa=rowSums(is.na(.))) %>% group_by(tool) %>%
@@ -207,13 +212,16 @@ if ((s<-nrow(check_latrines %>% filter(flag)))==0){print("No issues related with
 add.to.cleaning.log(checks = check_latrines, check_id = "HH.4", question.names = c("share_facility", "hh_share_facility"))
 
 ## HH.5. Check if people reported waste and trash frequently visible but garbage is supposed to be collected frequently [Common HH only]
-check_garbage <- data %>% select(any_of(col.cl.data), c("traces1", "garbage_collect")) %>% 
-  mutate(flag = ifelse((traces1 == "frequently" & (garbage_collect %in% c("once_week","every"))),T,F),
-         issue = ifelse(flag, "The household reported the trash to be visible in the street but waste collection should happen frequently", "")) %>%
-  setnames(old=col.cl.data, new=col.cl, skip_absent = T)
-if ((s<-nrow(check_garbage %>% filter(flag)))==0){print("No issues related to waste and trash management. The dataset seems clean.")} else {
-  print(paste0(s," issues related to waste and trash management detected. Check later."))}
-add.to.cleaning.log(checks = check_garbage, check_id = "HH.5", question.names = c("traces1", "garbage_collect"))
+### WARNING => Check left aside for now and garbage_collect not used for analysis as question formulation is ambiguous and not streamlined across tools
+### Cholera HH: garbage_collect = S4. Has the household’s garbage been regularly collected in the last 30 days? (yes no dnk)
+### Cholera HH: garbage_collect = S5.1 How frequently is garbage collected from your household? (every day, once a week, month, etc…)
+# check_garbage <- data %>% select(any_of(col.cl.data), c("traces1", "garbage_collect")) %>% 
+#   mutate(flag = ifelse((traces1 == "frequently" & (garbage_collect %in% c("once_week","every"))),T,F),
+#          issue = ifelse(flag, "The household reported the trash to be visible in the street but waste collection should happen frequently", "")) %>%
+#   setnames(old=col.cl.data, new=col.cl, skip_absent = T)
+# if ((s<-nrow(check_garbage %>% filter(flag)))==0){print("No issues related to waste and trash management. The dataset seems clean.")} else {
+#   print(paste0(s," issues related to waste and trash management detected. Check later."))}
+# add.to.cleaning.log(checks = check_garbage, check_id = "HH.5", question.names = c("traces1", "garbage_collect"))
 
 ################################################################################################
 ## KI survey checks
@@ -269,23 +277,36 @@ add.to.cleaning.log(checks = check_soap_price, check_id = "KI.3", question.names
 ################################################################################
 ## Exporting cleaning logs
 ################################################################################
-## Save main cleaning log [hh or ki depending on tool.type]
+
+## 1. Save main cleaning log [hh or ki depending on tool.type]
+cleaning.log <- cleaning.log %>% mutate(comment="", .after="new_value") %>%
+  left_join(tool_hh %>% select(name, `label::english`, `label::arabic`) %>%
+              setNames(paste0(colnames(.), "_hh")), by = c("variable"="name_hh")) %>%
+  left_join(tool_ki %>% select(name, `label::english`, `label::arabic`) %>%
+              setNames(paste0(colnames(.), "_ki")), by = c("variable"="name_ki"))
+if (tool.type == "HH"){cleaning.log <- cleaning.log %>% select(-matches("_ki"))} else if (tool.type == "KI") {cleaning.log <- cleaning.log %>% select(-matches("_hh"))}
+
 tool <- tolower(tool.type)
 save.follow.up.requests(cleaning.log, 
                         choices = get(paste0("choices_", tool)), 
                         tool = get(paste0("tool_", tool)), 
-                        paste0("./output/WASH_WANTS_", tool, "_cleaning log_",today,".xlsx"))
-browseURL(paste0("./output/WASH_WANTS_", tool, "_cleaning log_",today,".xlsx"))
+                        paste0("./cleaning/WASH_WANTS_", tool, "_cleaning log_",today,".xlsx"))
+browseURL(paste0("./cleaning/WASH_WANTS_", tool, "_cleaning log_",today,".xlsx"))
 
-## Split cleaning logs by organisation
+## 2. Split cleaning logs by organisation
 dir.create("cleaning/partners", showWarnings = F)
-organisations <- data$g_enum_agency %>% unique
-for (org in organisations){
-  cleaning.log %>% filter(agency==org) %>% save.follow.up.requests(choices = get(paste0("choices_", tool)),
-                                                                   tool = get(paste0("tool_", tool)),
-                                                                   paste0("cleaning/partners/cleaning_log_", tool,"_out_", org,"_", today, ".xlsx"))
-}
+dir.create("cleaning/partners/hh", showWarnings = F)
+dir.create("cleaning/partners/ki", showWarnings = F)
+dir.create("cleaning/partners feedback", showWarnings = F)
+dir.create("cleaning/partners feedback/hh", showWarnings = F)
+dir.create("cleaning/partners feedback/ki", showWarnings = F)
 
+organisations <- cleaning.log$agency %>% unique
+for (org in organisations){
+  cleaning.log %>% filter(agency==org) %>% 
+    save.follow.up.requests(choices = get(paste0("choices_", tool)), tool = get(paste0("tool_", tool)),
+                            paste0("cleaning/partners/", tool, "/cleaning_log_", tool,"_out_", org,"_", today, ".xlsx"))
+}
 
 ################################################################################
 ## Logical check - code structure to add a new check

@@ -21,15 +21,13 @@ dir.create("analysis", showWarnings = F)
 dir.create("output", showWarnings = F)
 
 ## Specifcy filenames
-# data.cholera.hh.filename <- "data/WASH_WANTS HH Cholera_cleandata_2021-06-29_corrected.xlsx"
-# data.cholera.ki.filename <- "data/WASH_WANTS KI Cholera_cleandata_2021-06-17_FS.xlsx"
-# data.common.hh.filename <- "data/WASH_WANTS HH Common_cleandata_2021-06-29_FS_Corrected.xlsx"
-# data.common.ki.filename <- "data/WASH_WANTS KI Common_cleandata_2021-06-29_FS_corrected.xlsx"
+# data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-46-21.xlsx"
+# data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-39-21.xlsx"
+# data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-53-27.xlsx"
+# data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-38-11.xlsx"
 
-data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-46-21.xlsx"
-data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-39-21.xlsx"
-data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-53-27.xlsx"
-data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-38-11.xlsx"
+data.hh.cleaned.filename <- "output/data cleaned/data_cleaned_HH_2021-07-29.xlsx"
+data.ki.cleaned.filename <- "output/data cleaned/data_cleaned_KI_2021-07-29.xlsx"
 
 kobo.cholera.hh.filename <- "data/Cholera_HH_tool.xlsx"
 kobo.cholera.ki.filename <- "data/Cholera_KI_tool.xlsx"

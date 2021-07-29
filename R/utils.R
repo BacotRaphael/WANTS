@@ -134,7 +134,7 @@ save.follow.up.requests <- function(cl, choices, tool,  filename.out="output/tes
   addWorksheet(wb, "Choices validation")
   writeData(wb = wb, x = cl, sheet = "Follow-up", startRow = 1)
   
-  data.val <- data.validation.list(choices, tool)
+  data.val <<- data.validation.list(choices, tool)
   writeData(wb = wb, x = data.val, sheet = "Choices validation", startRow = 1)
   
   col.style <- createStyle(textDecoration="bold", fgFill="#CECECE", halign="center", border="TopBottomLeftRight", borderColour="#000000")
@@ -279,7 +279,7 @@ get.other.db <- function(){
 get.dependencies <- function(){
   # determine dependencies of "other" questions 
   # (i.e. if there is a change in any of the "other" question, we need to follow-up on other questions)
-  relevant.cleaned <- filter(tool.survey, !is.na(relevant) & !str_ends(relevant, "\\'other\\'\\)")) %>% 
+  relevant.cleaned <- filter(tool, !is.na(relevant) & !str_ends(relevant, "\\'other\\'\\)")) %>% 
     filter(str_starts(type, "select") | str_starts(type, "text") | str_starts(type, "integer"))
   dependencies <- other.db %>% 
     mutate(questions.other.affected=as.numeric(lapply(name, 
