@@ -194,6 +194,37 @@ save.follow.up.requests <- function(cl, choices, tool,  filename.out="output/tes
   saveWorkbook(wb, filename.out, overwrite = TRUE)
 } 
 
+save.pcode.followup <- function(cl, filename.out="output/test.xlsx"){
+  wb <- createWorkbook()
+  addWorksheet(wb, "Unmatched pcodes")
+  addWorksheet(wb, "Pcodes")
+  writeData(wb = wb, x = cl, sheet = "Unmatched pcodes", startRow = 1)
+  writeData(wb = wb, x = pcodes %>% filter(!duplicated(admin2Pcode)), sheet = "Pcodes", startRow = 1)
+  
+  style.col.color <- createStyle(fgFill="#E5FFCC", border="TopBottomLeftRight", borderColour="#000000")
+  style.col.color.first <- createStyle(textDecoration="bold", fgFill="steelblue1", border="TopBottomLeftRight", borderColour="#000000", wrapText=F)
+  col.style <- createStyle(textDecoration="bold", fgFill="#CECECE", halign="center", border="TopBottomLeftRight", borderColour="#000000")
+  
+  addStyle(wb, "Unmatched pcodes", style = col.style, rows = 1, cols=1:ncol(cl))
+  addStyle(wb, "Unmatched pcodes", style = style.col.color.first, rows = 2:(nrow(cl)+1), cols=9)
+  addStyle(wb, "Unmatched pcodes", style = style.col.color, rows = 2:(nrow(cl)+1), cols=7)
+  addStyle(wb, "Unmatched pcodes", style = style.col.color, rows = 2:(nrow(cl)+1), cols=8)
+  
+  setColWidths(wb, "Unmatched pcodes", cols=1, widths=10)
+  setColWidths(wb, "Unmatched pcodes", cols=2, widths=10)
+  setColWidths(wb, "Unmatched pcodes", cols=3, widths=10)
+  setColWidths(wb, "Unmatched pcodes", cols=4, widths=10)
+  setColWidths(wb, "Unmatched pcodes", cols=5, widths=10)
+  setColWidths(wb, "Unmatched pcodes", cols=6, widths=10)
+  setColWidths(wb, "Unmatched pcodes", cols=7, widths=10)
+  setColWidths(wb, "Unmatched pcodes", cols=8, widths=10)
+  setColWidths(wb, "Unmatched pcodes", cols=9, widths=10)
+  setColWidths(wb, "Unmatched pcodes", cols=10:11, widths=10)
+  setColWidths(wb, "Unmatched pcodes", cols=12:ncol(cl), widths=10)
+  
+  saveWorkbook(wb, filename.out, overwrite = TRUE)
+}
+
 ## Cleaning functions
 ## 1. Numerical outlier 
 detect.outliers <- function(df, method="sd-linear", n.sd=3, n.iqr=3){

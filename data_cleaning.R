@@ -127,14 +127,26 @@ data <- data %>% filter(!id %in% id.to.delete)                                  
 
 ## 2.1. Matching pcodes 
 ## 2.1.1. Matching of the district name with arabic name the pcode table
-check_pcode <- data %>% select(uuid, g_governorate,g_district) %>%
+check_pcode <- data %>% select(col.cl.data[1:4], g_governorate,g_district) %>%
   left_join(pcodes %>% select(admin2Pcode, admin2Name_ar) %>% filter(!duplicated(admin2Pcode)), by = c("g_district"="admin2Name_ar")) %>%
-  mutate(admin2Pcode = ifelse(is.na(admin2Pcode) & g_district %in% pcodes$admin2Pcode, g_district, admin2Pcode))
+  mutate(admin2Pcode = ifelse(is.na(admin2Pcode) & g_district %in% pcodes$admin2Pcode, g_district, admin2Pcode)) %>%
+  left_join(pcodes %>% select(admin2Pcode, admin2Name_en) %>% filter(!duplicated(admin2Pcode)) %>%
+              setNames(paste0(colnames(.), "_match_en")), by = c("g_district"="admin2Name_en_match_en")) %>%
+  mutate(admin2Pcode = ifelse(is.na(admin2Pcode) & substr(admin2Pcode_match_en, 1, 4) == g_governorate, admin2Pcode_match_en, admin2Pcode)) %>% select(-admin2Pcode_match_en)
 
 check_pcode_nomatch <- check_pcode %>% filter(is.na(admin2Pcode)) %>%
-  mutate(admin2Pcode = str_replace_all(g_district, setNames(pcodes$admin2Pcode,pcodes$admin2Name_ar)),
-         admin2Pcode = gsub("[\u0621-\u064A]+","",admin2Pcode))
-## To be finished
+  mutate(admin2Pcode_match = str_replace_all(g_district, setNames(pcodes$admin2Pcode,pcodes$admin2Name_ar)),
+         admin2Pcode_match = gsub("[\u0621-\u064A]+", "", admin2Pcode), 
+         admin2Pcode_match = ifelse(g_governorate, "", admin2Pcode),
+         admin2Pcode_final = "") %>%  setnames(old=col.cl.data, new=col.cl, skip_absent = T)
+
+## write the remaining unmatched pcodes and update manually
+save.pcode.followup(check_pcode_nomatch, paste0("cleaning/unmatchedpcodes", today, ".xlsx"))
+browseURL(paste0("cleaning/unmatchedpcodes", today, ".xlsx"))
+
+## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
+## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
+pcode.followup.file.updated <- "cleaning/unmatchedpcodes2021-07-29_updaed.xlsx"
 
 ## Match with pcodes 
 metacol <- c("g_governorate","admin1Name_en","admin1Name_ar","g_district","admin2Name_en","admin2Name_ar","g_sub_district","admin3Name_en","admin3Name_ar")
