@@ -42,90 +42,39 @@ analysis.common.ki.filename <- "data/common_KI_analysis_plan_v1_district.csv"
 filename.pcode <- "data/yem_admin_ochayemen_20191002.xlsx"
 
 ## load all datasets
+data_hh <- read.xlsx(data.hh.cleaned.filename)
+data_ki <- read.xlsx(data.ki.cleaned.filename)
+
 tools <- c("cholera.hh", "cholera.ki", "common.hh", "common.ki")                # Make sure that the list of tools here match the filenames above
 for (t in tools) {
-  assign(paste0("data_", gsub("\\.", "_", t)), read.xlsx(paste0("data.", t, ".filename") %>% get) %>% mutate_all(as.character))
-  assign(paste0("tool_", gsub("\\.", "_", t)), read.xlsx(paste0("kobo.", t, ".filename") %>% get) %>% mutate_all(as.character))
-  assign(paste0("choices_", gsub("\\.", "_", t)), read.xlsx(paste0("kobo.", t, ".filename") %>% get, sheet = "choices") %>% mutate_all(as.character))
-  assign(paste0("analysis_", gsub("\\.", "_", t)), read.csv(paste0("analysis.", t, ".filename") %>% get) %>% mutate_all(as.character))
+  tool <- gsub("\\.", "_", t)
+  assign(paste0("tool_", tool), read.xlsx(paste0("kobo.", t, ".filename") %>% get) %>% mutate_all(as.character))
+  assign(paste0("choices_", tool), read.xlsx(paste0("kobo.", t, ".filename") %>% get, sheet = "choices") %>% mutate_all(as.character))
+  assign(paste0("analysis_", tool), read.csv(paste0("analysis.", t, ".filename") %>% get) %>% mutate_all(as.character))
 }
+
 pcodes <- read.xlsx(filename.pcode, sheet = "admin3")
 
-## Streamline columns names in dataset and imported kobo tool
-# Clean headers in data
-data_common_hh <- data_common_hh %>% 
-  setNames(paste0(gsub("Comm_HH_", "", colnames(.)))) %>%                       ## Delete Comm_HH_ prefix from column names
-  setNames(paste0(gsub("/", "\\.", colnames(.))))                               ## Replace the choice separator "/" with "." to streamline headers to PBI dashboard
-data_cholera_hh <- data_cholera_hh %>%
-  setNames(paste0(gsub("Chol_HH_", "", colnames(.)))) %>%                       ## Delete Chol_HH_ prefix from column names
-  setNames(paste0(gsub("/", "\\.", colnames(.)))) 
-data_cholera_ki <- data_cholera_ki %>%
-  setNames(paste0(gsub("/", "\\.", colnames(.))))
+# Consolidates choices and tools from common and cholera
+## Harmonise the kobo tools following the changes done in column headers in data_cleaning.R
+harmonise.tools()
 
-# Clean variable names in Kobo tools
-tool_common_hh <- tool_common_hh %>% mutate(name = gsub("Comm_HH_", "", name))
-tool_cholera_hh <- tool_cholera_hh %>% mutate(name = gsub("Chol_HH_", "", name))
-
-# W5.1 How does your household adapt to the lack of water? Recoding choices
-data_common_hh <- data_common_hh %>% 
-  rename(`adapt_lack.less_preferred_drinking`=`adapt_lack.surface_water_other`, # surface_water_other should be less_preferred_drinking
-         `adapt_lack.surface_drinking`=`adapt_lack.surface_water`,              # adapt_lack.surface_water should be adapt_lack.surface_drinking
-         `adapt_lack.less_preferred_other`=`adapt_lack.untreated`,              # untreated should be less_preferred_other
-         `adapt_lack.surface_other`=`adapt_lack.other_surface`) %>%             # other_surface should be surface_other
-  mutate(adapt_lack = gsub("surfasurface_waterce_water_other","less_preferred_drinking",
-                           gsub("surface_water", "surface_drinking",
-                                gsub("untreated", "less_preferred_other",
-                                     gsub("other_surface", "surface_other", adapt_lack)))))
-# Check Comment if all good
-# data_common_hh %>% pull(adapt_lack) %>% str_split(" ") %>% unlist %>% unique
-choices_common_hh <- choices_common_hh %>% 
-  mutate(name = gsub("surface_water_other","less_preferred_drinking",
-                     gsub("surface_water", "surface_drinking",
-                          gsub("untreated", "less_preferred_other",
-                               gsub("other_surface", "surface_other", name)))))
-
-data_cholera_hh <- data_cholera_hh %>%
-  rename(`adapt_lack.further_source`=`adapt_lack.further`,                      # further should be further_source
-         `adapt_lack.dangerous_source`=`adapt_lack.dangerous`) %>%              # dangerous should be dangerous_source
-  mutate(adapt_lack = gsub("further", "further_source",
-                           gsub("dangerous", "dangerous_source", adapt_lack)))
-# Check Comment if all good
-# data_cholera_hh %>% pull(adapt_lack) %>% str_split(" ") %>% unlist %>% unique
-choices_common_hh <- choices_common_hh %>%
-  mutate(name = gsub("further", "further_source",
-                     gsub("dangerous", "dangerous_source", name)))
-
-## Renaming for the KI datasets !! ORDER DEPENDENT, Don't switch order of line 79 and 80 !!
-data_cholera_ki <- data_cholera_ki %>% 
-  rename(w_waterneeds=w_watersmell,                                             # Renaming wrongly named columns in data cholera KI tool (shifted)
-         w_watersmell=w_waterquality_what)                                      # Renaming wrongly named columns in data cholera KI tool (shifted)
-
-## Update the tool accordingly 
-tool_cholera_ki <- tool_cholera_ki %>% 
-  mutate(name=gsub("^watersmell$", "w_waterneeds", name),
-         name=gsub("^w_waterquality_what$", "watersmell", name))
-
-## Compare columns from different tools
-col_cholera_hh = data.frame(id=colnames(data_cholera_hh), col_cholera_hh=colnames(data_cholera_hh))
-col_cholera_ki = data.frame(id=colnames(data_cholera_ki), col_cholera_ki=colnames(data_cholera_ki))
-col_common_hh = data.frame(id=colnames(data_common_hh), col_common_hh=colnames(data_common_hh))
-col_common_ki = data.frame(id=colnames(data_common_ki), col_common_ki=colnames(data_common_ki))
-
-col.all <- col_cholera_hh %>% full_join(col_cholera_ki, by = "id") %>% full_join(col_common_hh, by="id") %>% full_join(col_common_ki, by="id") %>% rename(question_header=id)
+tool_hh <- bind_rows(tool_cholera_hh, tool_common_hh) %>% filter(!duplicated(name))
+choices_hh <- bind_rows(choices_cholera_hh, choices_common_hh) %>% filter(!duplicated(paste0(list_name,name)))
+tool_ki <- bind_rows(tool_cholera_ki, tool_common_ki) %>% filter(!duplicated(name))
+choices_ki <- bind_rows(choices_cholera_ki, choices_common_ki) %>% filter(!duplicated(paste0(list_name,name)))
 
 ## For all dataset, create as many binary column as choices for all select_one questions 
-#  To be done => get also the select multiple columns binary
 # Get the list of all select one columns for all datasets
-tool.list <- gsub("\\.", "_", tools)
-
-for (t in tool.list){
+for (t in c("hh", "ki")){
   assign(paste0("col.select.one.", t), get(paste0("tool_", t)) %>% filter(grepl("select_one", type)) %>% pull(name))
   assign(paste0("col.select.multiple.", t), get(paste0("tool_", t)) %>% filter(grepl("select_multiple", type)) %>% pull(name))
 }
 
 # For each select one/multiple colum in each dataset, create as many binary columns as choices present in the corresponding kobo tool
 # Can take up to 30 seconds, be patient...
-for (t in tool.list){
+t <- "hh"
+for (t in c("hh", "ki")){
   values <- choice.long(get(paste0("choices_", t)), get(paste0("tool_", t))) %>% filter(!name %in% c("g_governorate", "g_district", "g_sub_district"))
   for (col in c(get(paste0("col.select.one.",t)), get(paste0("col.select.multiple.",t)))){
     unique.val <- values %>% filter(name==col) %>% pull(value)
@@ -139,12 +88,6 @@ for (t in tool.list){
     }
   }
 }
-
-## Consolidate Common and Cholera datasets together for KI and HHs respectively 
-data_ki <- data_cholera_ki %>% mutate(tool="cholera", .after = "date_survey") %>% bind_rows(data_common_ki %>% mutate(tool="common")) %>%
-  mutate(tool_cholera=ifelse(tool=="cholera", 1,0), .after = "tool")
-data_hh <- data_cholera_hh %>% mutate(tool="cholera", .after = "date_survey") %>% bind_rows(data_common_hh %>% mutate(tool="common")) %>%
-  mutate(tool_cholera=ifelse(tool=="cholera", 1,0), .after = "tool")
 
 ## Mutate binary as numerical variable
 cols.num.ki <- c(colnames(data_ki)[grepl("\\.", colnames(data_ki))])

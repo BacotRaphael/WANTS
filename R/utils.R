@@ -1,6 +1,25 @@
 ## Data harmonisation & consolidation 
 
-harmonise.consolidate.ki <- function(x) {
+harmonise.tools <- function(){
+  
+  tool_cholera_ki <<- tool_cholera_ki %>%
+    mutate(name=gsub("w_watersmell", "w_waterneeds", name), name=gsub("w_waterquality_what", "w_watersmell", name))
+  
+  tool_common_hh <<- tool_common_hh %>% mutate(name = gsub("Comm_HH_", "", name))
+  tool_cholera_hh <<- tool_cholera_hh %>% mutate(name = gsub("Chol_HH_", "", name))
+  
+  choices_common_hh <<- choices_common_hh %>% 
+    mutate(name = gsub("surface_water_other","less_preferred_drinking",
+                       gsub("surface_water", "surface_drinking",
+                            gsub("untreated", "less_preferred_other",
+                                 gsub("other_surface", "surface_other", name)))))
+  
+  choices_common_hh <<- choices_common_hh %>%
+    mutate(name = gsub("further", "further_source",
+                       gsub("dangerous", "dangerous_source", name)))
+}
+
+harmonise.consolidate.ki <- function() {
   ## 1. Clean headers in data
     data_cholera_ki <<- data_cholera_ki %>%
     setNames(paste0(gsub("/", "\\.", colnames(.))))
@@ -19,7 +38,7 @@ harmonise.consolidate.ki <- function(x) {
     mutate(tool_cholera=ifelse(tool=="cholera", 1,0), .after = "tool")
 }
 
-harmonise.consolidate.hh <- function(x){
+harmonise.consolidate.hh <- function(){
   ## 1. Clean headers in data
   data_common_hh <<- data_common_hh %>% 
     setNames(paste0(gsub("Comm_HH_", "", colnames(.)))) %>%                       ## Delete Comm_HH_ prefix from column names
