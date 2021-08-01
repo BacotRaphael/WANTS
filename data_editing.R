@@ -73,9 +73,18 @@ if (tool.type=="HH"){data <- data_hh} else {data <- data_ki}
 dir.create("cleaning/partners feedback", showWarnings = F)
 dir.create("cleaning/partners feedback/hh", showWarnings = F)
 dir.create("cleaning/partners feedback/ki", showWarnings = F)
+
+## Load internal cleaning log
+file.internal.cleaning.log <- "cleaning/WASH_WANTS_hh_cleaning log_internal_2021-08-01.xlsx"
+cleanig.log.internal <- read.xlsx(file.internal.cleaning.log) %>% mutate_all(as.character)
+
+## Load Partners' external cleaning logs
 updated.cl.files <- list.files(paste0("cleaning/partners feedback/", tool))
 cleaning.log <- lapply(updated.cl.files, function(x) read.xlsx(paste0("cleaning/partners feedback/",tool,"/", x)) %>% mutate_all(as.character)) %>% bind_rows
 
+## Consolidate intenal and external cleaning logs
+cleaning.log <- cleaning.log %>% bind_rows(cleanig.log.internal)
+  
 ## 2.2. Apply changes from cleaning log
 data_cleaned <- data
 for (r in seq_along(1:nrow(cleaning.log))){

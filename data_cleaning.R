@@ -79,7 +79,17 @@ choices_ki <- bind_rows(choices_cholera_ki, choices_common_ki) %>% filter(!dupli
 ## Which tool are you cleaning (uncomment the relevant one)
 tool.type <- "HH"
 # tool.type <- "KI"
-if (tool.type=="HH"){data <- data_hh} else {data <- data_ki}
+
+## Rename data, tool and choices with corresponding version
+if (tool.type=="HH"){
+  data <- data_hh
+  choices <- choices_hh
+  tool <- tool_hh
+  } else {
+    data <- data_ki 
+    choices <- choices_ki
+    tool <- tool_ki}
+
 data <- data %>% 
   setnames(old = c("_uuid", "_index", "NO"), new = c("uuid", "index", "number"), skip_absent = T) %>%
   mutate(id=1:nrow(.)) %>% select(id, uuid, everything())
@@ -90,6 +100,7 @@ del.cl <- c("uuid", "agency", "enum_firstname", "enum_lastname", "area", "issue"
 del.cl.data <- c("uuid", "g_enum_agency", "g_enum_name", "g_enum_last_name", "g_sub_district", "issue")
 
 cleaning.log <- initialise.cleaning.log()
+cleaning.log.internal <- initialise.cleaning.log()
 deletion.log <- initialise.deletion.log()
 
 ################################################################################################
@@ -102,7 +113,6 @@ check_duplicates <- data %>% group_by(uuid) %>% mutate(n=n()) %>%
   setnames(old=col.cl.data, new=col.cl, skip_absent = T)
 if ((s<-nrow(check_duplicates %>% filter(flag)))==0){print("No duplicate surveys. The dataset seems clean.")} else {
   print(paste0(s," duplicate surveys detected. To be checked."))}
-# add.to.cleaning.log(checks = check_duplicates, check_id = "0", question.names = c("uuid"))
 
 duplicate_surveys <- check_duplicates %>% filter(flag)
 view(duplicate_surveys)                                                         ## Carefully inspect duplicates and make sure the latest version is the one to keep
@@ -111,8 +121,8 @@ kept_duplicate_surveys <- duplicate_surveys %>% group_by(uuid) %>%              
   filter(end == max(end)) %>% ungroup
 
 view(kept_duplicate_surveys)                                                    ## Carefully inspect duplicates and make sure the latest version is the one to keep
-## Write the ids that you want to keep
 
+## Write in the vector below the ids (not UUIDs!) that you want to delete.
 id.to.delete <- c("174", "172",
                   duplicate_surveys$id[!duplicate_surveys$id %in% kept_duplicate_surveys$id])                                                 
 if (sum(!id.to.delete %in% duplicate_surveys$id)>0) stop("The id entered are not corresponding to the duplicates. Do it again!")
@@ -125,36 +135,144 @@ deletion.log <- deletion.log %>%                                                
 
 data <- data %>% filter(!id %in% id.to.delete)                                  ## Keep only the relevant surveys
 
+## If you still have duplicate surveys which you have doubt about, add it to the cleaning log by uncommenting and running the lines below:
+# add.to.cleaning.log(checks = check_duplicates %>% filter(id %in% duplicate_surveys$id[!duplicate_surveys$id %in% id.to.delete]), 
+#                     check_id = "0", question.names = c("uuid"))
+
 ## 2.1. Matching pcodes 
-## 2.1.1. Matching of the district name with arabic name the pcode table
+## A. Sub-district Matching
+## 2.1.1. Perfect Matching of the district name with arabic and english name
+check_pcode_sub <- data %>% select(col.cl.data[1:4], g_governorate,g_district, g_sub_district) %>%
+  mutate(flag=ifelse(!g_sub_district %in% pcodes$admin3Pcode, T, F),
+         issue=ifelse(flag,"The value entered is not a valid Pcode.","")) %>%
+  left_join(pcodes %>% select(admin3Pcode, admin3RefName_ar) %>% filter(!duplicated(admin3Pcode)), by = c("g_sub_district"="admin3RefName_ar")) %>%
+  mutate(admin3Pcode = ifelse(is.na(admin3Pcode) & g_sub_district %in% pcodes$admin3Pcode, g_sub_district, admin3Pcode)) %>%
+  left_join(pcodes %>% select(admin3Pcode, admin3RefName_en) %>% filter(!duplicated(admin3Pcode)) %>%
+              setNames(paste0(colnames(.), "_match_en")), by = c("g_sub_district"="admin3RefName_en_match_en")) %>%
+  mutate(admin3Pcode = ifelse(is.na(admin3Pcode) & substr(admin3Pcode_match_en, 1, 4) == g_governorate, admin3Pcode_match_en, admin3Pcode)) %>% select(-admin3Pcode_match_en)
+
+## 2.1.2. Partial matching of districtname in arabic
+check_pcode_sub_2 <- check_pcode_sub %>% filter(is.na(admin3Pcode)) %>%
+  mutate(admin3Pcode_match = str_replace_all(g_sub_district, setNames(pcodes$admin3Pcode,pcodes$admin3RefName_ar)),
+         admin3Pcode_match = gsub("[\u0621-\u064A]+", "", admin3Pcode), 
+         admin3Pcode_match = ifelse(g_governorate!= substr(str_trim(admin3Pcode_match), 1, 4), "", admin3Pcode_match),
+         admin3Pcode = ifelse(is.na(admin3Pcode) & !is.na(admin3Pcode_match), admin3Pcode_match, admin3Pcode),
+         admin3Pcode_final = "")
+
+## 2.1.3. Export the remaining entries that have no match to be matched manually
+check_pcode_sub_nomatch <- check_pcode_sub_2 %>% filter(is.na(admin3Pcode))
+save.pcode.followup(check_pcode_sub_nomatch %>% select(-admin3Pcode) %>% relocate(g_district, .after ="admin3Pcode_final"),
+                    pcode.table = pcodes,
+                    paste0("cleaning/unmatched_pcodes_sub_", today, ".xlsx"))
+browseURL(paste0("cleaning/unmatched_pcodes_sub_", today, ".xlsx"))
+
+## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
+## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
+sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_2021-08-01_updated.xlsx"
+
+unmatched_pcodes_sub_updated <- read.xlsx(sub.pcode.followup.file.updated) %>%
+  mutate(admin3Pcode = ifelse(!is.na(admin3Pcode_final), admin3Pcode_final, "")) 
+
+check_pcode_sub_final <- bind_rows(check_pcode_sub %>% filter(!is.na(admin3Pcode)), 
+                               check_pcode_sub_2 %>% filter(!is.na(admin3Pcode)), 
+                               unmatched_pcodes_sub_updated) %>% select(-admin3Pcode_final, -admin3Pcode_match) %>%
+  setnames(old=col.cl.data, new=col.cl, skip_absent = T) %>% mutate(g_sub_district=area)
+
+## Save changes to cleaning log
+## 1. Internal cleaning log for Pcodes for which we found a match without issue
+internal_pcode_sub_log <- cleaning.log.new.entries(check_pcode_sub_final %>% filter(!admin3Pcode %in% c(NA,"")),
+                                               check_id = "1", question.names = "g_sub_district", new.value = "admin3Pcode")
+cleaning.log.internal <- cleaning.log.internal %>% bind_rows(internal_pcode_sub_log)
+
+## 2. External cleaning log when no match has been found
+add.to.cleaning.log(check_pcode_sub_final %>% filter(admin3Pcode %in% (c(NA,""))),
+                    check_id = "1", question.names = "g_sub_district", new.value = "admin3Pcode")
+
+## Apply changes for all matches found 
+for (r in seq_along(1:nrow(internal_pcode_sub_log))){
+  data[data$uuid==internal_pcode_sub_log[r, "uuid"], "g_sub_district"] <- internal_pcode_sub_log[r, "new_value"]
+}
+
+## District Matching
+## 2.1.1. Perfect Matching of the district name with arabic and english name
 check_pcode <- data %>% select(col.cl.data[1:4], g_governorate,g_district) %>%
+  mutate(flag=ifelse(!g_district %in% pcodes$admin2Pcode, T, F),
+         issue=ifelse(flag,"The value entered is not a valid Pcode.","")) %>%
   left_join(pcodes %>% select(admin2Pcode, admin2Name_ar) %>% filter(!duplicated(admin2Pcode)), by = c("g_district"="admin2Name_ar")) %>%
   mutate(admin2Pcode = ifelse(is.na(admin2Pcode) & g_district %in% pcodes$admin2Pcode, g_district, admin2Pcode)) %>%
   left_join(pcodes %>% select(admin2Pcode, admin2Name_en) %>% filter(!duplicated(admin2Pcode)) %>%
               setNames(paste0(colnames(.), "_match_en")), by = c("g_district"="admin2Name_en_match_en")) %>%
   mutate(admin2Pcode = ifelse(is.na(admin2Pcode) & substr(admin2Pcode_match_en, 1, 4) == g_governorate, admin2Pcode_match_en, admin2Pcode)) %>% select(-admin2Pcode_match_en)
 
-check_pcode_nomatch <- check_pcode %>% filter(is.na(admin2Pcode)) %>%
+## 2.1.2. Partial matching of districtname in arabic
+check_pcode_2 <- check_pcode %>% filter(is.na(admin2Pcode)) %>%
   mutate(admin2Pcode_match = str_replace_all(g_district, setNames(pcodes$admin2Pcode,pcodes$admin2Name_ar)),
-         admin2Pcode_match = gsub("[\u0621-\u064A]+", "", admin2Pcode), 
-         admin2Pcode_match = ifelse(g_governorate, "", admin2Pcode),
-         admin2Pcode_final = "") %>%  setnames(old=col.cl.data, new=col.cl, skip_absent = T)
+         admin2Pcode_match = str_trim(gsub("[\u0621-\u064A]+", "", admin2Pcode_match)), 
+         admin2Pcode_match = ifelse(g_governorate != substr(str_trim(admin2Pcode_match), 1, 4), "", admin2Pcode_match),
+         admin2Pcode = ifelse(is.na(admin2Pcode) & !is.na(admin2Pcode_match), admin2Pcode_match, admin2Pcode),
+         admin2Pcode_final = "")
 
-## write the remaining unmatched pcodes and update manually
-save.pcode.followup(check_pcode_nomatch, paste0("cleaning/unmatchedpcodes", today, ".xlsx"))
-browseURL(paste0("cleaning/unmatchedpcodes", today, ".xlsx"))
+## 2.1.3. Export the remaining entries that have no match to be matched manually
+check_pcode_nomatch <- check_pcode_2 %>% filter(is.na(admin2Pcode))
+save.pcode.followup(check_pcode_nomatch %>% select(-admin2Pcode),
+                    pcode.table = pcodes %>% filter(!duplicated(admin2Pcode)) %>% select(-matches("admin3")),
+                    paste0("cleaning/unmatched_pcodes_", today, ".xlsx"))
+browseURL(paste0("cleaning/unmatched_pcodes_", today, ".xlsx"))
 
 ## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
 ## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
-pcode.followup.file.updated <- "cleaning/unmatchedpcodes2021-07-29_updaed.xlsx"
+pcode.followup.file.updated <- "cleaning/unmatched_pcodes_2021-08-01_updated.xlsx"
 
-## Match with pcodes 
-metacol <- c("g_governorate","admin1Name_en","admin1Name_ar","g_district","admin2Name_en","admin2Name_ar","g_sub_district","admin3Name_en","admin3Name_ar")
-data <- data %>% select(-any_of(c(""))) %>% 
-  left_join(pcodes %>% select(admin3Pcode, any_of(metacol)), by = c("g_sub_district"="admin3Pcode")) %>%
-  select(all_of(metacol), everything())
+unmatched_pcodes_updated <- read.xlsx(pcode.followup.file.updated) %>%
+  mutate(admin2Pcode = ifelse(!is.na(admin2Pcode_final), admin2Pcode_final, "")) 
 
-## 2.2. Checking agency name (TBD)
+check_pcode_final <- bind_rows(check_pcode %>% filter(!is.na(admin2Pcode)), 
+                               check_pcode_2 %>% filter(!is.na(admin2Pcode)), 
+                               unmatched_pcodes_updated) %>% select(-admin2Pcode_final, -admin2Pcode_match) %>%
+  left_join(data %>% select(uuid, g_sub_district), by="uuid") %>%
+  setnames(old=col.cl.data, new=col.cl, skip_absent = T)
+
+## Save changes to cleaning log
+## 1. Internal cleaning log for Pcodes for which we found a match without issue
+internal_pcode_log <- cleaning.log.new.entries(check_pcode_final %>% filter(!is.na(admin2Pcode)),
+                                                 check_id = "1", question.names = "g_district", new.value = "admin2Pcode")
+cleaning.log.internal <- cleaning.log.internal %>% bind_rows(internal_pcode_log)
+
+## 2. External cleaning log when no match has been found
+add.to.cleaning.log(check_pcode_final %>% filter(is.na(admin2Pcode)),
+                    check_id = "1", question.names = "g_district", new.value = "admin2Pcode")
+
+## Apply changes for all matches found 
+for (r in seq_along(1:nrow(internal_pcode_log))){
+  data[data$uuid==internal_pcode_log[r, "uuid"], "g_district"] <- internal_pcode_log[r, "new_value"]
+}
+
+## 2.2. Checking agency name (TBD) For now manual:
+## 2.1 Exporting file with names non matching
+list.agency.tool <- choices %>% filter(list_name == "enum_agency") %>% pull(name)
+check_agency <- data %>% select(col.cl.data[1:5], "g_enum_agency_other") %>% 
+  mutate(flag=ifelse(!g_enum_agency %in% list.agency.tool[!list.agency.tool %in% "other"], T, F), issue = "The agency name entered is not part of the tool's choices.")
+log_agency <-  check_agency %>% filter(flag) %>%
+  setnames(old=col.cl.data, new=col.cl, skip_absent = T) %>% mutate(g_enum_agency=agency)
+log_agency <- cleaning.log.new.entries(log_agency, check_id = "2", question.names = c("g_enum_agency", "g_enum_agency_other"))
+save.follow.up.requests(log_agency, choices = choices, tool = tool, filename.out = paste0("cleaning/agency_log_", today,".xlsx"))
+browseURL(paste0("cleaning/agency_log_", today,".xlsx"))
+
+## Manually update the value for both agency and agency_other entry, and then rename of the file with "_updated" at the end
+agency.log.file.updated <-  "cleaning/agency_log_2021-08-01_updated.xlsx"
+agency_log_updated <- read.xlsx(agency.log.file.updated)
+
+## Add to cleaning log
+agency_log_internal <- agency_log_updated %>% filter(!new_value %in% c("",NA))
+cleaning.log.internal <- cleaning.log.internal %>% bind_rows(agency_log_internal)
+agency_log_external <- agency_log_updated %>% filter(new_value %in% c("",NA))
+cleaning.log <- cleaning.log %>% bind_rows(agency_log_external)
+
+## Apply changes for matches done manually
+for (r in seq_along(1:nrow(agency_log_internal))){
+  var <- agency_log_internal[r, "variable"]
+  data[data$uuid==agency_log_internal[r, "uuid"], var] <- agency_log_internal[r, "new_value"]
+}
 
 ## 2.2. Shortest path check 
 C <- 2.5  # parameter to calibrate to determine tool specific NA threshold starting which surveys will be flagged [IQR rule] 
@@ -175,7 +293,7 @@ method <- "iqr-log"
 check_outliers <- data %>% select(uuid, any_of(col.num.all)) %>%
   detect.outliers(., method=method, n.sd=3) %>%                                 # n.sd will calibrate sensitivity of outlier detection. / see utils for other methods
   left_join(data %>% select(any_of(col.cl.data)), by="uuid") %>%
-  mutate(issue="", check_id="3", new_value="", fix="Checked with partner", checked_by="ON") %>%
+  mutate(check_id="3", new_value="", fix="Checked with partner", checked_by="ON") %>%
   setnames(old=col.cl.data, new=col.cl, skip_absent = T) %>% dplyr::select(all_of(col.cl)) %>% mutate_all(as.character)
 if((s <- nrow(check_outliers)) > 0){print(paste0("There are ", s, " numerical outliers detected using ", method, " method for the following variables"))
   print(check_outliers$variable %>% unique)} else {print("No numerical outliers detected.")}
@@ -298,12 +416,20 @@ cleaning.log <- cleaning.log %>% mutate(comment="", .after="new_value") %>%
               setNames(paste0(colnames(.), "_ki")), by = c("variable"="name_ki"))
 if (tool.type == "HH"){cleaning.log <- cleaning.log %>% select(-matches("_ki"))} else if (tool.type == "KI") {cleaning.log <- cleaning.log %>% select(-matches("_hh"))}
 
-tool <- tolower(tool.type)
+tool.lower <- tolower(tool.type)
 save.follow.up.requests(cleaning.log, 
-                        choices = get(paste0("choices_", tool)), 
-                        tool = get(paste0("tool_", tool)), 
-                        paste0("./cleaning/WASH_WANTS_", tool, "_cleaning log_",today,".xlsx"))
-browseURL(paste0("./cleaning/WASH_WANTS_", tool, "_cleaning log_",today,".xlsx"))
+                        choices = choices, 
+                        tool = tool, 
+                        paste0("./cleaning/WASH_WANTS_", tool.lower, "_cleaning log_",today,".xlsx"))
+# browseURL(paste0("./cleaning/WASH_WANTS_", tool.lower, "_cleaning log_",today,".xlsx"))
+
+## Save internal cleaning log
+save.follow.up.requests(cleaning.log.internal, 
+                        choices = choices, 
+                        tool = tool, 
+                        paste0("./cleaning/WASH_WANTS_", tool.lower, "_cleaning log_internal_",today,".xlsx"))
+# browseURL(paste0("./cleaning/WASH_WANTS_", tool.lower, "_cleaning log_internal_",today,".xlsx"))
+
 
 ## 2. Split cleaning logs by organisation
 dir.create("cleaning/partners", showWarnings = F)
@@ -316,8 +442,8 @@ dir.create("cleaning/partners feedback/ki", showWarnings = F)
 organisations <- cleaning.log$agency %>% unique
 for (org in organisations){
   cleaning.log %>% filter(agency==org) %>% 
-    save.follow.up.requests(choices = get(paste0("choices_", tool)), tool = get(paste0("tool_", tool)),
-                            paste0("cleaning/partners/", tool, "/cleaning_log_", tool,"_out_", org,"_", today, ".xlsx"))
+    save.follow.up.requests(choices = choices, tool = tool,
+                            paste0("cleaning/partners/", tool.lower, "/cleaning_log_", tool.lower,"_out_", org,"_", today, ".xlsx"))
 }
 
 ################################################################################

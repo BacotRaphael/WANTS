@@ -1,5 +1,4 @@
 ## Data harmonisation & consolidation 
-
 harmonise.tools <- function(){
   
   tool_cholera_ki <<- tool_cholera_ki %>%
@@ -110,6 +109,28 @@ initialise.deletion.log <- function(){
                    issue = as.character())) 
 }
 
+cleaning.log.new.entries <- function(checks, check_id, question.names=c(), issue="issue", new.value="" , fix="Checked with partner", checked_by="ON", add.col=c("")){
+  df <- initialise.cleaning.log()
+  if (nrow(checks)>0){
+    for(q.n in question.names){
+      new.entries <- checks %>%  filter(flag) %>%
+        mutate(uuid=uuid %>% as.character,
+               enum_firstname=enum_firstname %>% as.character,
+               enum_lastname=enum_lastname %>% as.character,
+               variable=q.n %>% as.character,
+               issue=issue %>% as.character,
+               check_id=check_id %>% as.character,
+               old_value=!!sym(q.n) %>% as.character,
+               new_value=if (new.value=="") {as.character(new.value)} else {as.character(!!sym(new.value))},
+               fix=fix %>% as.character,
+               checked_by= checked_by %>% as.character)
+      new.entries <- new.entries %>% select(all_of(col.cl), any_of(add.col))
+      df <- bind_rows(df, new.entries)
+    }
+    return(df %>% arrange(uuid, variable, agency))
+  }
+}
+
 add.to.cleaning.log <- function(checks, check_id, question.names=c(), issue="issue", new.value="" , fix="Checked with partner", checked_by="ON", add.col=c("")){
   df <- initialise.cleaning.log()
   if (nrow(checks)>0){
@@ -122,7 +143,7 @@ add.to.cleaning.log <- function(checks, check_id, question.names=c(), issue="iss
                issue=issue %>% as.character,
                check_id=check_id %>% as.character,
                old_value=!!sym(q.n) %>% as.character,
-               new_value=new.value %>% as.character,
+               new_value=if (new.value=="") {as.character(new.value)} else {as.character(!!sym(new.value))},
                fix=fix %>% as.character,
                checked_by= checked_by %>% as.character)
       new.entries <- new.entries %>% select(all_of(col.cl), any_of(add.col))
@@ -194,12 +215,12 @@ save.follow.up.requests <- function(cl, choices, tool,  filename.out="output/tes
   saveWorkbook(wb, filename.out, overwrite = TRUE)
 } 
 
-save.pcode.followup <- function(cl, filename.out="output/test.xlsx"){
+save.pcode.followup <- function(cl, pcode.table,  filename.out="output/test.xlsx"){
   wb <- createWorkbook()
   addWorksheet(wb, "Unmatched pcodes")
   addWorksheet(wb, "Pcodes")
   writeData(wb = wb, x = cl, sheet = "Unmatched pcodes", startRow = 1)
-  writeData(wb = wb, x = pcodes %>% filter(!duplicated(admin2Pcode)), sheet = "Pcodes", startRow = 1)
+  writeData(wb = wb, x = pcode.table, sheet = "Pcodes", startRow = 1)
   
   style.col.color <- createStyle(fgFill="#E5FFCC", border="TopBottomLeftRight", borderColour="#000000")
   style.col.color.first <- createStyle(textDecoration="bold", fgFill="steelblue1", border="TopBottomLeftRight", borderColour="#000000", wrapText=F)
@@ -207,26 +228,61 @@ save.pcode.followup <- function(cl, filename.out="output/test.xlsx"){
   
   addStyle(wb, "Unmatched pcodes", style = col.style, rows = 1, cols=1:ncol(cl))
   addStyle(wb, "Unmatched pcodes", style = style.col.color.first, rows = 2:(nrow(cl)+1), cols=9)
-  addStyle(wb, "Unmatched pcodes", style = style.col.color, rows = 2:(nrow(cl)+1), cols=7)
-  addStyle(wb, "Unmatched pcodes", style = style.col.color, rows = 2:(nrow(cl)+1), cols=8)
+  addStyle(wb, "Unmatched pcodes", style = style.col.color, rows = 2:(nrow(cl)+1), cols=10)
+  # addStyle(wb, "Unmatched pcodes", style = style.col.color, rows = 2:(nrow(cl)+1), cols=8)
   
-  setColWidths(wb, "Unmatched pcodes", cols=1, widths=10)
+  setColWidths(wb, "Unmatched pcodes", cols=1, widths=25)
   setColWidths(wb, "Unmatched pcodes", cols=2, widths=10)
-  setColWidths(wb, "Unmatched pcodes", cols=3, widths=10)
-  setColWidths(wb, "Unmatched pcodes", cols=4, widths=10)
-  setColWidths(wb, "Unmatched pcodes", cols=5, widths=10)
-  setColWidths(wb, "Unmatched pcodes", cols=6, widths=10)
-  setColWidths(wb, "Unmatched pcodes", cols=7, widths=10)
-  setColWidths(wb, "Unmatched pcodes", cols=8, widths=10)
-  setColWidths(wb, "Unmatched pcodes", cols=9, widths=10)
-  setColWidths(wb, "Unmatched pcodes", cols=10:11, widths=10)
-  setColWidths(wb, "Unmatched pcodes", cols=12:ncol(cl), widths=10)
+  setColWidths(wb, "Unmatched pcodes", cols=3, widths=14.5)
+  setColWidths(wb, "Unmatched pcodes", cols=4, widths=14.5)
+  setColWidths(wb, "Unmatched pcodes", cols=5, widths=14.5)
+  setColWidths(wb, "Unmatched pcodes", cols=6, widths=12)
+  setColWidths(wb, "Unmatched pcodes", cols=7, widths=5)
+  setColWidths(wb, "Unmatched pcodes", cols=8, widths=35)
+  setColWidths(wb, "Unmatched pcodes", cols=9, widths=18.5)
+  setColWidths(wb, "Unmatched pcodes", cols=10, widths=18.5)
+  setColWidths(wb, "Unmatched pcodes", cols=11, widths=18.5)
+  # setColWidths(wb, "Unmatched pcodes", cols=12:ncol(cl), widths=10)
   
   saveWorkbook(wb, filename.out, overwrite = TRUE)
 }
 
 ## Cleaning functions
 ## 1. Numerical outlier 
+detect.outliers <- function(df, method="sd-linear", n.sd=3, n.iqr=3){
+  res <- data.frame()
+  for (col in colnames(df)[colnames(df)!="uuid"]){
+    df.temp <- data.frame(uuid=df$uuid, value=as.numeric(df[[col]])) %>% filter(!is.na(value) & value>0)
+    if (method=="sd-linear"){
+      df.temp <- df.temp %>%
+        mutate(is.outlier.high=ifelse(value > mean(value, na.rm=T) + n.sd*sd(value, na.rm=T), T, F),
+               is.outlier.low =ifelse(value < mean(value, na.rm=T) - n.sd*sd(value, na.rm=T), T, F))
+    } else if (method=="iqr-linear") {
+      df.temp <- df.temp %>%
+        mutate(col=value,
+               is.outlier.high=ifelse(col > quantile(col, 0.75) + n.iqr*IQR(col), T, F),
+               is.outlier.low =ifelse(col < quantile(col, 0.25) - n.iqr*IQR(col), T, F))
+    } else if (method=="sd-log"){
+      df.temp <- df.temp %>%
+        mutate(col.log=log(value),
+               is.outlier.high=ifelse(col.log > mean(col.log, na.rm=T) + n.sd*sd(col.log, na.rm=T), T, F), 
+               is.outlier.low =ifelse(col.log < mean(col.log, na.rm=T) - n.sd*sd(col.log, na.rm=T), T, F))
+    } else if (method=="iqr-log") {
+      df.temp <- df.temp %>%
+        mutate(col.log=log(value),
+               is.outlier.high=ifelse(col.log > quantile(col.log, 0.75) + n.iqr*IQR(col.log), T, F),
+               is.outlier.low =ifelse(col.log < quantile(col.log, 0.25) - n.iqr*IQR(col.log), T, F))
+    } else stop("Method unknown")
+    df.temp <- filter(df.temp, is.outlier.high | is.outlier.low) %>% 
+      mutate(variable=col, old_value=value, 
+             issue = ifelse(is.outlier.high, paste0("High numerical outlier, using ", method, " method"),
+                            ifelse(is.outlier.low, paste0("Low numerical outlier, using ", method, " method"), ""))) %>%
+      select(uuid, variable, old_value, issue)
+    res <- rbind(res, df.temp)
+  }
+  return(res)
+}
+
 detect.outliers <- function(df, method="sd-linear", n.sd=3, n.iqr=3){
   res <- data.frame()
   for (col in colnames(df)[colnames(df)!="uuid"]){
