@@ -163,12 +163,13 @@ check_pcode_sub_2 <- check_pcode_sub %>% filter(is.na(admin3Pcode)) %>%
 check_pcode_sub_nomatch <- check_pcode_sub_2 %>% filter(is.na(admin3Pcode))
 save.pcode.followup(check_pcode_sub_nomatch %>% select(-admin3Pcode) %>% relocate(g_district, .after ="admin3Pcode_final"),
                     pcode.table = pcodes,
-                    paste0("cleaning/unmatched_pcodes_sub_", today, ".xlsx"))
-browseURL(paste0("cleaning/unmatched_pcodes_sub_", today, ".xlsx"))
+                    paste0("cleaning/unmatched_pcodes_sub_", tool.type, "_", today, ".xlsx"))
+browseURL(paste0("cleaning/unmatched_pcodes_sub_", tool.type, "_", today, ".xlsx"))
 
 ## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
 ## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
-sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_2021-08-01_updated.xlsx"
+sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_HH_2021-08-01_updated.xlsx"
+# sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_KI_2021-08-01_updated.xlsx"
 
 unmatched_pcodes_sub_updated <- read.xlsx(sub.pcode.followup.file.updated) %>%
   mutate(admin3Pcode = ifelse(!is.na(admin3Pcode_final), admin3Pcode_final, "")) 
@@ -202,7 +203,8 @@ check_pcode <- data %>% select(col.cl.data[1:4], g_governorate,g_district) %>%
   mutate(admin2Pcode = ifelse(is.na(admin2Pcode) & g_district %in% pcodes$admin2Pcode, g_district, admin2Pcode)) %>%
   left_join(pcodes %>% select(admin2Pcode, admin2Name_en) %>% filter(!duplicated(admin2Pcode)) %>%
               setNames(paste0(colnames(.), "_match_en")), by = c("g_district"="admin2Name_en_match_en")) %>%
-  mutate(admin2Pcode = ifelse(is.na(admin2Pcode) & substr(admin2Pcode_match_en, 1, 4) == g_governorate, admin2Pcode_match_en, admin2Pcode)) %>% select(-admin2Pcode_match_en)
+  mutate(admin2Pcode = ifelse(is.na(admin2Pcode) & substr(admin2Pcode_match_en, 1, 4) == g_governorate, admin2Pcode_match_en, admin2Pcode)) %>% 
+  select(-admin2Pcode_match_en)
 
 ## 2.1.2. Partial matching of districtname in arabic
 check_pcode_2 <- check_pcode %>% filter(is.na(admin2Pcode)) %>%
@@ -213,22 +215,23 @@ check_pcode_2 <- check_pcode %>% filter(is.na(admin2Pcode)) %>%
          admin2Pcode_final = "")
 
 ## 2.1.3. Export the remaining entries that have no match to be matched manually
-check_pcode_nomatch <- check_pcode_2 %>% filter(is.na(admin2Pcode))
+check_pcode_nomatch <- check_pcode_2 %>% filter(admin2Pcode %in% c("",NA, "NA")) %>% mutate_all(as.character)
 save.pcode.followup(check_pcode_nomatch %>% select(-admin2Pcode),
                     pcode.table = pcodes %>% filter(!duplicated(admin2Pcode)) %>% select(-matches("admin3")),
-                    paste0("cleaning/unmatched_pcodes_", today, ".xlsx"))
-browseURL(paste0("cleaning/unmatched_pcodes_", today, ".xlsx"))
+                    paste0("cleaning/unmatched_pcodes_", tool.type, "_", today, ".xlsx"))
+browseURL(paste0("cleaning/unmatched_pcodes_", tool.type, "_", today, ".xlsx"))
 
 ## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
 ## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
-pcode.followup.file.updated <- "cleaning/unmatched_pcodes_2021-08-01_updated.xlsx"
+pcode.followup.file.updated <- "cleaning/unmatched_pcodes_HH_2021-08-01_updated.xlsx"
+# pcode.followup.file.updated <- "cleaning/unmatched_pcodes_KI_2021-08-01_updated.xlsx"
 
 unmatched_pcodes_updated <- read.xlsx(pcode.followup.file.updated) %>%
-  mutate(admin2Pcode = ifelse(!is.na(admin2Pcode_final), admin2Pcode_final, "")) 
+  mutate(admin2Pcode = ifelse(!is.na(admin2Pcode_final), admin2Pcode_final, ""))
 
-check_pcode_final <- bind_rows(check_pcode %>% filter(!is.na(admin2Pcode)), 
-                               check_pcode_2 %>% filter(!is.na(admin2Pcode)), 
-                               unmatched_pcodes_updated) %>% select(-admin2Pcode_final, -admin2Pcode_match) %>%
+check_pcode_final <- bind_rows(check_pcode %>% filter(!admin2Pcode %in% c(NA,"","NA")), 
+                               check_pcode_2 %>% filter(!admin2Pcode %in% c(NA,"","NA")), 
+                               unmatched_pcodes_updated %>% mutate(admin2Pcode_match=as.character(admin2Pcode_match))) %>% select(-admin2Pcode_final, -admin2Pcode_match) %>%
   left_join(data %>% select(uuid, g_sub_district), by="uuid") %>%
   setnames(old=col.cl.data, new=col.cl, skip_absent = T)
 
@@ -255,11 +258,13 @@ check_agency <- data %>% select(col.cl.data[1:5], "g_enum_agency_other") %>%
 log_agency <-  check_agency %>% filter(flag) %>%
   setnames(old=col.cl.data, new=col.cl, skip_absent = T) %>% mutate(g_enum_agency=agency)
 log_agency <- cleaning.log.new.entries(log_agency, check_id = "2", question.names = c("g_enum_agency", "g_enum_agency_other"))
-save.follow.up.requests(log_agency, choices = choices, tool = tool, filename.out = paste0("cleaning/agency_log_", today,".xlsx"))
-browseURL(paste0("cleaning/agency_log_", today,".xlsx"))
+save.follow.up.requests(log_agency, choices = choices, tool = tool, filename.out = paste0("cleaning/agency_log_", tool.type, "_", today,".xlsx"))
+browseURL(paste0("cleaning/agency_log_", tool.type, "_", today,".xlsx"))
 
 ## Manually update the value for both agency and agency_other entry, and then rename of the file with "_updated" at the end
-agency.log.file.updated <-  "cleaning/agency_log_2021-08-01_updated.xlsx"
+agency.log.file.updated <-  "cleaning/agency_log_HH_2021-08-01_updated.xlsx"
+# agency.log.file.updated <-  "cleaning/agency_log_KI_2021-08-01_updated.xlsx"
+
 agency_log_updated <- read.xlsx(agency.log.file.updated)
 
 ## Add to cleaning log
@@ -270,8 +275,10 @@ cleaning.log <- cleaning.log %>% bind_rows(agency_log_external)
 
 ## Apply changes for matches done manually
 for (r in seq_along(1:nrow(agency_log_internal))){
-  var <- agency_log_internal[r, "variable"]
-  data[data$uuid==agency_log_internal[r, "uuid"], var] <- agency_log_internal[r, "new_value"]
+  if (nrow(agency_log_internal)>0){
+    var <- agency_log_internal[r, "variable"]
+    data[data$uuid==agency_log_internal[r, "uuid"], var] <- agency_log_internal[r, "new_value"]
+  }
 }
 
 ## 2.2. Shortest path check 
