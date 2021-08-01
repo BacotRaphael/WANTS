@@ -77,8 +77,8 @@ choices_ki <- bind_rows(choices_cholera_ki, choices_common_ki) %>% filter(!dupli
 ################################################################################################
 
 ## Which tool are you cleaning (uncomment the relevant one)
-tool.type <- "HH"
-# tool.type <- "KI"
+# tool.type <- "HH"
+tool.type <- "KI"
 
 ## Rename data, tool and choices with corresponding version
 if (tool.type=="HH"){
@@ -123,9 +123,11 @@ kept_duplicate_surveys <- duplicate_surveys %>% group_by(uuid) %>%              
 view(kept_duplicate_surveys)                                                    ## Carefully inspect duplicates and make sure the latest version is the one to keep
 
 ## Write in the vector below the ids (not UUIDs!) that you want to delete.
-id.to.delete <- c("174", "172",
-                  duplicate_surveys$id[!duplicate_surveys$id %in% kept_duplicate_surveys$id])                                                 
-if (sum(!id.to.delete %in% duplicate_surveys$id)>0) stop("The id entered are not corresponding to the duplicates. Do it again!")
+id.to.delete <- c("")
+# id.to.delete <- c("174", "172")
+id.to.delete <- c(id.to.delete, duplicate_surveys$id[!duplicate_surveys$id %in% kept_duplicate_surveys$id])
+
+if (!is.na(id.to.delete) & sum(!id.to.delete %in% duplicate_surveys$id)>0) stop("The id entered are not corresponding to the duplicates. Do it again!")
 
 deletion.log <- deletion.log %>%                                                ## add to deletion log
   bind_rows(data %>% filter(id %in% id.to.delete) %>% 
@@ -168,8 +170,8 @@ browseURL(paste0("cleaning/unmatched_pcodes_sub_", tool.type, "_", today, ".xlsx
 
 ## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
 ## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
-sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_HH_2021-08-01_updated.xlsx"
-# sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_KI_2021-08-01_updated.xlsx"
+# sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_HH_2021-08-01_updated.xlsx"
+sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_KI_2021-08-01_updated.xlsx"
 
 unmatched_pcodes_sub_updated <- read.xlsx(sub.pcode.followup.file.updated) %>%
   mutate(admin3Pcode = ifelse(!is.na(admin3Pcode_final), admin3Pcode_final, "")) 
@@ -195,10 +197,15 @@ for (r in seq_along(1:nrow(internal_pcode_sub_log))){
 }
 
 ## District Matching
-## 2.1.1. Perfect Matching of the district name with arabic and english name
-check_pcode <- data %>% select(col.cl.data[1:4], g_governorate,g_district) %>%
+## 2.1.0. Matching district from sub-district name when possible // to be finished!!
+check_pcode_0 <- data %>% select(col.cl.data[1:4], g_governorate,g_district, g_sub_district) %>%
   mutate(flag=ifelse(!g_district %in% pcodes$admin2Pcode, T, F),
          issue=ifelse(flag,"The value entered is not a valid Pcode.","")) %>%
+  select(col.cl.data[1:4], g_governorate,g_district, g_sub_district) %>%
+  left_join(pcodes %>% filter(!duplicated(admin2Pcode)) %>% select(admin2Pcode, admin3Pcode), by = c("g_sub_district"="admin3Pcode"))
+
+## 2.1.1. Perfect Matching of the district name with arabic and english name
+check_pcode <- check_pcode_0 %>%
   left_join(pcodes %>% select(admin2Pcode, admin2Name_ar) %>% filter(!duplicated(admin2Pcode)), by = c("g_district"="admin2Name_ar")) %>%
   mutate(admin2Pcode = ifelse(is.na(admin2Pcode) & g_district %in% pcodes$admin2Pcode, g_district, admin2Pcode)) %>%
   left_join(pcodes %>% select(admin2Pcode, admin2Name_en) %>% filter(!duplicated(admin2Pcode)) %>%
