@@ -13,16 +13,22 @@ pacman::p_load(tidyverse, stringr, openxlsx, data.table, lubridate, randomcoloR)
 ## Create directories 
 dir.create("cleaning", showWarnings = F)
 
-## Specify filenames
-data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-46-21.xlsx"
-data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-39-21.xlsx"
-data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-53-27.xlsx"
-data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-38-11.xlsx"
+## Specify filenames and comment the file version you don't need
+# 
+# data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-46-21.xlsx"
+# kobo.cholera.hh.filename <- "data/Cholera_HH_tool.xlsx"
+# 
+# data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-53-27.xlsx"
+# kobo.common.hh.filename <- "data/Common_HH_tool.xlsx"
 
-kobo.cholera.hh.filename <- "data/Cholera_HH_tool.xlsx"
+data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-39-21.xlsx"
 kobo.cholera.ki.filename <- "data/Cholera_KI_tool.xlsx"
-kobo.common.hh.filename <- "data/Common_HH_tool.xlsx"
+
+data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-38-11.xlsx"
 kobo.common.ki.filename <- "data/Common_KI_tool.xlsx"
+
+list.filenames <- grep("filename", ls(), value = T)
+list.tools.specified <- grep("hh|ki", unique(gsub("data\\.|kobo\\.|\\.filename", "", list.filenames)), value = T)
 
 filename.pcode <- "data/yem_admin_ochayemen_20191002.xlsx"
 
@@ -33,31 +39,34 @@ source("R/utils.R")
 ## 1. Load and consolidate datasets
 ################################################################################################
 ## 1.1. Load all raw datasets
-tools <- c("cholera.hh", "cholera.ki", "common.hh", "common.ki")                # Make sure that the list of tools here match the filenames above
+# tools <- c("cholera.hh", "cholera.ki", "common.hh", "common.ki")                # Make sure that the list of tools here match the filenames above
+tools <- list.tools.specified
 for (t in tools) {
   assign(paste0("data_", gsub("\\.", "_", t)), read.xlsx(paste0("data.", t, ".filename") %>% get) %>% mutate_all(as.character))
   assign(paste0("tool_", gsub("\\.", "_", t)), read.xlsx(paste0("kobo.", t, ".filename") %>% get) %>% mutate_all(as.character))
   assign(paste0("choices_", gsub("\\.", "_", t)), read.xlsx(paste0("kobo.", t, ".filename") %>% get, sheet = "choices") %>% mutate_all(as.character))
 }
+
+which.tools.loaded()
+
 pcodes <- read.xlsx(filename.pcode, sheet = "admin3")
 
 ## 1.2. Streamline columns names in dataset and imported kobo tool and consolidate common and cholera datset for HH and KI
 ### Note: This section will align column names and choices and create a consolidate dataset (the first function creates data_hh, the second will create data_ki)
+### To run properla
 harmonise.consolidate.hh()                                                      ## 2. harmonise and consolidate common and cholera HH 
 harmonise.consolidate.ki()                                                      ## 3. harmonise and consolidate common and cholera HH
 # harmonise.and.consolidate.datasets()                                          ## 1. original function that cleans HH and KI at once
 
-## 1.3 Compare columns from different tools
-col_cholera_hh = data.frame(id=colnames(data_cholera_hh), col_cholera_hh=colnames(data_cholera_hh))
-col_cholera_ki = data.frame(id=colnames(data_cholera_ki), col_cholera_ki=colnames(data_cholera_ki))
-col_common_hh = data.frame(id=colnames(data_common_hh), col_common_hh=colnames(data_common_hh))
-col_common_ki = data.frame(id=colnames(data_common_ki), col_common_ki=colnames(data_common_ki))
-
-col.all <- col_cholera_hh %>% full_join(col_cholera_ki, by = "id") %>% full_join(col_common_hh, by="id") %>% full_join(col_common_ki, by="id") %>% rename(question_header=id)
+## 1.3 Compare columns from different tools // uncomment the relevant one depending on the tool you have loaded [You need at least 2 hh tools from the same type]
+combine.col.hh()
+combine.col.ki()
+combine.col.all()
 
 ## 1.4 Mutate binary as numerical variable
 cols.num.ki <- c(colnames(data_ki)[grepl("\\.", colnames(data_ki))])
 data_ki <- data_ki %>% mutate_at(vars(all_of(cols.num.ki)), as.numeric)
+
 cols.num.hh <- c(colnames(data_hh)[grepl("\\.|infant|child|adult|elderly|hh_member_", colnames(data_hh))], "hh_number")
 data_hh <- data_hh %>% mutate_at(vars(all_of(cols.num.hh)), as.numeric)
 
@@ -66,17 +75,14 @@ data_hh <- data_hh %>% mutate_at(vars(all_of(cols.num.hh)), as.numeric)
 # tool_hh <- bind_rows(tool_cholera_hh, tool_common_hh) %>% filter(!type %in% c("begin_group", "end_group", "image")) %>% group_by(name) %>% mutate(n=n()) %>% arrange(-n, name)
 # tool_ki <- bind_rows(tool_cholera_ki, tool_common_ki)  %>% filter(!type %in% c("begin_group", "end_group", "image")) %>% group_by(name) %>% mutate(n=n()) %>% arrange(-n, name)
 
-tool_hh <- bind_rows(tool_cholera_hh, tool_common_hh) %>% filter(!duplicated(name))
-choices_hh <- bind_rows(choices_cholera_hh, choices_common_hh) %>% filter(!duplicated(paste0(list_name,name)))
-
-tool_ki <- bind_rows(tool_cholera_ki, tool_common_ki) %>% filter(!duplicated(name))
-choices_ki <- bind_rows(choices_cholera_ki, choices_common_ki) %>% filter(!duplicated(paste0(list_name,name)))
+## If two different tools are loaded (hh common and hh cholera for example), the line below will combine them together
+combine.tools()
 
 ################################################################################################
 ## 2. Cleaning
 ################################################################################################
 
-## Which tool are you cleaning (uncomment the relevant one)
+## If all type of tools are loaded, precise which tool are you cleaning (uncomment the relevant one)
 # tool.type <- "HH"
 tool.type <- "KI"
 
@@ -85,7 +91,7 @@ if (tool.type=="HH"){
   data <- data_hh
   choices <- choices_hh
   tool <- tool_hh
-  } else {
+  } else if (tool.type=="KI"){
     data <- data_ki 
     choices <- choices_ki
     tool <- tool_ki}
@@ -109,7 +115,7 @@ deletion.log <- initialise.deletion.log()
 
 ## 2.0. Duplicate check
 check_duplicates <- data %>% group_by(uuid) %>% mutate(n=n()) %>%
-  mutate(flag = ifelse(n>1,T,F), issue = "Duplicate survey.") %>%
+  mutate(flag = ifelse(n>1,T,F), issue = ifelse(flag==T,"Duplicate survey.","")) %>%
   setnames(old=col.cl.data, new=col.cl, skip_absent = T)
 if ((s<-nrow(check_duplicates %>% filter(flag)))==0){print("No duplicate surveys. The dataset seems clean.")} else {
   print(paste0(s," duplicate surveys detected. To be checked."))}
@@ -197,27 +203,29 @@ for (r in seq_along(1:nrow(internal_pcode_sub_log))){
 }
 
 ## District Matching
-## 2.1.0. Matching district from sub-district name when possible // to be finished!!
-check_pcode_0 <- data %>% select(col.cl.data[1:4], g_governorate,g_district, g_sub_district) %>%
+## 2.1.0. Matching district from sub-district name when possible
+check_pcode_0 <- data %>% select(col.cl.data[1:4], g_governorate, g_district, g_sub_district) %>%
   mutate(flag=ifelse(!g_district %in% pcodes$admin2Pcode, T, F),
-         issue=ifelse(flag,"The value entered is not a valid Pcode.","")) %>%
-  select(col.cl.data[1:4], g_governorate,g_district, g_sub_district) %>%
-  left_join(pcodes %>% filter(!duplicated(admin2Pcode)) %>% select(admin2Pcode, admin3Pcode), by = c("g_sub_district"="admin3Pcode"))
+         issue=ifelse(flag,"The value entered is not a valid Pcode.",""),
+         admin2Pcode=ifelse(str_detect(g_sub_district, g_governorate), substr(g_sub_district, 1, 6), NA),
+         issue=ifelse(str_detect(g_sub_district, "YE") & is.na(admin2Pcode), "The sub-district Pcode doesn't match with the governorate entered.", issue))
 
 ## 2.1.1. Perfect Matching of the district name with arabic and english name
 check_pcode <- check_pcode_0 %>%
-  left_join(pcodes %>% select(admin2Pcode, admin2Name_ar) %>% filter(!duplicated(admin2Pcode)), by = c("g_district"="admin2Name_ar")) %>%
-  mutate(admin2Pcode = ifelse(is.na(admin2Pcode) & g_district %in% pcodes$admin2Pcode, g_district, admin2Pcode)) %>%
-  left_join(pcodes %>% select(admin2Pcode, admin2Name_en) %>% filter(!duplicated(admin2Pcode)) %>%
+  left_join(pcodes %>% select(admin2Pcode, admin2Name_ar) %>% filter(!duplicated(admin2Pcode)) %>%
+              setNames(paste0(colnames(.), "_match_ar")), by = c("g_district"="admin2Name_ar_match_ar")) %>%
+  mutate(admin2Pcode = ifelse(is.na(admin2Pcode) & str_detect(admin2Pcode_match_ar, g_governorate), 
+                              admin2Pcode_match_ar, admin2Pcode)) %>% select(-admin2Pcode_match_ar) %>%
+           left_join(pcodes %>% select(admin2Pcode, admin2Name_en) %>% filter(!duplicated(admin2Pcode)) %>%
               setNames(paste0(colnames(.), "_match_en")), by = c("g_district"="admin2Name_en_match_en")) %>%
-  mutate(admin2Pcode = ifelse(is.na(admin2Pcode) & substr(admin2Pcode_match_en, 1, 4) == g_governorate, admin2Pcode_match_en, admin2Pcode)) %>% 
+  mutate(admin2Pcode = ifelse(is.na(admin2Pcode) & str_detect(admin2Pcode_match_en, g_governorate), admin2Pcode_match_en, admin2Pcode)) %>% 
   select(-admin2Pcode_match_en)
 
-## 2.1.2. Partial matching of districtname in arabic
+## 2.1.2. Partial matching of district name in arabic
 check_pcode_2 <- check_pcode %>% filter(is.na(admin2Pcode)) %>%
   mutate(admin2Pcode_match = str_replace_all(g_district, setNames(pcodes$admin2Pcode,pcodes$admin2Name_ar)),
          admin2Pcode_match = str_trim(gsub("[\u0621-\u064A]+", "", admin2Pcode_match)), 
-         admin2Pcode_match = ifelse(g_governorate != substr(str_trim(admin2Pcode_match), 1, 4), "", admin2Pcode_match),
+         admin2Pcode_match = ifelse(!str_detect(str_trim(admin2Pcode_match), g_governorate), "", admin2Pcode_match),
          admin2Pcode = ifelse(is.na(admin2Pcode) & !is.na(admin2Pcode_match), admin2Pcode_match, admin2Pcode),
          admin2Pcode_final = "")
 
@@ -225,13 +233,15 @@ check_pcode_2 <- check_pcode %>% filter(is.na(admin2Pcode)) %>%
 check_pcode_nomatch <- check_pcode_2 %>% filter(admin2Pcode %in% c("",NA, "NA")) %>% mutate_all(as.character)
 save.pcode.followup(check_pcode_nomatch %>% select(-admin2Pcode),
                     pcode.table = pcodes %>% filter(!duplicated(admin2Pcode)) %>% select(-matches("admin3")),
-                    paste0("cleaning/unmatched_pcodes_", tool.type, "_", today, ".xlsx"))
+                    paste0("cleaning/unmatched_pcodes_", tool.type, "_", today, ".xlsx"),
+                    all.matches = check_pcode)
 browseURL(paste0("cleaning/unmatched_pcodes_", tool.type, "_", today, ".xlsx"))
 
 ## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
 ## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
-pcode.followup.file.updated <- "cleaning/unmatched_pcodes_HH_2021-08-01_updated.xlsx"
+# pcode.followup.file.updated <- "cleaning/unmatched_pcodes_HH_2021-08-01_updated.xlsx"
 # pcode.followup.file.updated <- "cleaning/unmatched_pcodes_KI_2021-08-01_updated.xlsx"
+pcode.followup.file.updated <- "cleaning/unmatched_pcodes_KI_2021-08-03.xlsx"
 
 unmatched_pcodes_updated <- read.xlsx(pcode.followup.file.updated) %>%
   mutate(admin2Pcode = ifelse(!is.na(admin2Pcode_final), admin2Pcode_final, ""))
