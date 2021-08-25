@@ -7,6 +7,8 @@ which.tools.loaded <- function(){
   cholera.hh <<- exists("data_cholera_hh")
   hh <<- common.hh & cholera.hh
   ki <<- common.ki & cholera.ki
+  one.hh <<- common.hh | cholera.hh
+  one.ki <<- common.ki | cholera.ki
 }
 
 harmonise.consolidate.ki <- function() {
@@ -18,18 +20,27 @@ harmonise.consolidate.ki <- function() {
   # common.ki <- exists("data_common_ki")
   # cholera.ki <- exists("data_cholera_ki")
   
+  if (!one.ki) stop("There is no key informant level data loaded to consolidate.")
+  if (exists("data_ki")) stop("Key Informant data has already been streamlined and consolidated.")
+  
   if (common.ki){data_common_ki <<- data_common_ki %>% mutate(tool="common", tool_cholera = 0, .after = "date_survey")}
   if (cholera.ki){
     ## 1. Clean headers in data
     data_cholera_ki <<- data_cholera_ki %>%
       setNames(paste0(gsub("/", "\\.", colnames(.))))
+    print("The column headers of data_cholera_ki dataset have been streamlined: / speparators have been replaced by .")
+    
     ## 2.1 Renaming for the KI datasets !! ORDER DEPENDENT, Don't switch order of line 79 and 80 !!
     data_cholera_ki <<- data_cholera_ki %>% 
       rename(w_waterneeds=w_watersmell,                                             # Renaming wrongly named columns in data cholera KI tool (shifted)
              w_watersmell=w_waterquality_what)                                      # Renaming wrongly named columns in data cholera KI tool (shifted)
+    print("Typo in the kobo tool fixed. The column watersmell has been renamed waterneeds and the column w_waterquality_what has been renamed w_watersmell.")
+    
     ## 2.2 Rename the tool accordingly
     tool_cholera_ki <<- tool_cholera_ki %>%
       mutate(name=gsub("w_watersmell", "w_waterneeds", name), name=gsub("w_waterquality_what", "w_watersmell", name))
+    print("The survey dataframe for cholera_ki (tool_cholera_ki) has been updated to incorporate these changes.")
+    
     ## 3. Add tool column
     data_cholera_ki <<- data_cholera_ki %>% mutate(tool="cholera", tool_cholera = 1, .after = "date_survey")
   }
@@ -39,6 +50,7 @@ harmonise.consolidate.ki <- function() {
     data_ki <<- data_cholera_ki %>% bind_rows(data_common_ki)} else if (cholera.ki & !common.ki) {
       data_ki <<- data_cholera_ki} else if (!cholera.ki & common.ki) {
         data_ki <<- data_common_ki}
+  print(paste0("The Key informant data from ", paste(unique(data_ki$tool), collapse=" and ")," tool has been consolidated in the dataframe data_ki"))  
 }
 
 harmonise.consolidate.hh <- function(){
@@ -46,15 +58,17 @@ harmonise.consolidate.hh <- function(){
   ## 1. Clean headers in HH data for common and/or cholera depending on what has been set up in the parameters at the beginning of the script
   ## 2. Recode some headers and their corresponding choices in the dataset and tool (choices and survey)
   ## 3. consolidate common and cholera HH tools if both files are imported
-  # 
-  # common.hh <- exists("data_common_hh")
-  # cholera.hh <- exists("data_cholera_hh")
+  
+  if (!one.hh) stop("There is no household level data loaded to consolidate.")
+  if (exists("data_hh")) stop("Key Informant data has already been streamlined and consolidated.")
   
   if (common.hh){
     data_common_hh <<- data_common_hh %>% 
       setNames(paste0(gsub("Comm_HH_", "", colnames(.)))) %>%                       ## Delete Comm_HH_ prefix from column names
       setNames(paste0(gsub("/", "\\.", colnames(.))))                               ## Replace the choice separator "/" with "." to streamline headers to PBI dashboard
     tool_common_hh <<- tool_common_hh %>% mutate(name = gsub("Comm_HH_", "", name)) ## Rename tool accordingly
+    print("The column headers of data_common_hh dataset have been streamlined:")
+    print("/ separators have been replaced by . and Comm_HH has been removed from column headers.")
     
     ## 2.1. Common tool - Recoding choices of Question W5.1 How does your household adapt to the lack of water?
     data_common_hh <<- data_common_hh %>% 
@@ -67,6 +81,10 @@ harmonise.consolidate.hh <- function(){
                                     gsub("untreated", "less_preferred_other",
                                          gsub("other_surface", "surface_other", adapt_lack)))))
     # data_common_hh %>% pull(adapt_lack) %>% str_split(" ") %>% unlist %>% unique  # check line - comment if all good
+    print("The choices from data_common_hh have been renamed for the Question W5.1 How does your household adapt to the lack of water?")
+    print("The choice surface_water_other has been renamed less_preferred_drinking; surface_water renamed surface_drinking, untreated renamed less_preferred_other, other_surface renamed surface_other.")
+    print("The binary columns headers have been renamed accordingly and the parent text question entries updated.")
+    
     ## 2.2. Rename tool accordingly
     choices_common_hh <<- choices_common_hh %>% 
       mutate(name = gsub("surface_water_other","less_preferred_drinking",
@@ -77,6 +95,7 @@ harmonise.consolidate.hh <- function(){
     data_common_hh <<- data_common_hh %>% mutate(tool="common", 
                                                  tool_cholera=ifelse(tool=="cholera", 1, 
                                                                      ifelse(tool=="common", 0, NA)), .after = "date_survey")
+    print("The choices dataframe for common_hh (choices_common_hh) has been updated to incorporate these changes.")
   }
     
   if (cholera.hh){
@@ -84,6 +103,8 @@ harmonise.consolidate.hh <- function(){
       setNames(paste0(gsub("Chol_HH_", "", colnames(.)))) %>%                       ## Delete Chol_HH_ prefix from column names
       setNames(paste0(gsub("/", "\\.", colnames(.))))                               ## replace / separator with .
     tool_cholera_hh <<- tool_cholera_hh %>% mutate(name = gsub("Chol_HH_", "", name)) ## Rename tool accordingly
+    print("The column headers of data_cholera_hh dataset have been streamlined:")
+    print("/ separators have been replaced by . and Chol_HH has been removed from column headers.")
     
     ## 2.3 Cholera tool - Recoding choices of Question W5.1 How does your household adapt to the lack of water?
     data_cholera_hh <<- data_cholera_hh %>%
@@ -92,10 +113,14 @@ harmonise.consolidate.hh <- function(){
       mutate(adapt_lack = gsub("further", "further_source",
                                gsub("dangerous", "dangerous_source", adapt_lack)))
     # data_cholera_hh %>% pull(adapt_lack) %>% str_split(" ") %>% unlist %>% unique # check line - comment if all good
+    print("The choices from data_cholera_hh have been renamed for the Question W5.1 How does your household adapt to the lack of water?")
+    print("The choice further has been renamed further_source; dangerous renamed dangerous_source.")
+    print("The binary columns headers have been renamed accordingly and the parent text question entries updated.")
     
     choices_cholera_hh <<- choices_cholera_hh %>%                                   ## rename tool accordingly
       mutate(name = gsub("further", "further_source",
                          gsub("dangerous", "dangerous_source", name)))
+    print("The choices dataframe for common_hh (choices_cholera_hh) has been updated to incorporate these changes.")
     
     data_cholera_hh <<- data_cholera_hh %>% mutate(tool="cholera", 
                                                    tool_cholera=ifelse(tool=="cholera", 1, 
@@ -107,23 +132,24 @@ harmonise.consolidate.hh <- function(){
     data_hh <<- data_cholera_hh %>% bind_rows(data_common_hh)} else if (cholera.hh & !common.hh) {
       data_hh <<- data_cholera_hh} else if (!cholera.hh & common.hh) {
         data_hh <<- data_common_hh}
+  print(paste0("The household data from ", paste(unique(data_hh$tool), collapse=" and ")," tool has been consolidated in the dataframe data_hh"))
 }
 
 combine.col.hh <- function(){
-  # hh <- exists("data_cholera_hh") & exists("data_common_hh")
   if (hh) {
     col_cholera_hh = data.frame(id=colnames(data_cholera_hh), col_cholera_hh=colnames(data_cholera_hh))
     col_common_hh = data.frame(id=colnames(data_common_hh), col_common_hh=colnames(data_common_hh))
-    col.all <<- col_cholera_hh %>% full_join(col_common_hh, by="id") %>% rename(question_header=id)
+    col.all.hh <<- col_cholera_hh %>% full_join(col_common_hh, by="id") %>% rename(question_header=id)
+    print("Column headers from the two household dataset have been consolidated into the dataframe col.all.hh to enable comparison.")
     }
   }
 
 combine.col.ki <- function(){
-  # ki <- exists("data_cholera_ki") & exists("data_common_ki")
   if (ki) {
     col_cholera_ki = data.frame(id=colnames(data_cholera_ki), col_cholera_ki=colnames(data_cholera_ki))
     col_common_ki = data.frame(id=colnames(data_common_ki), col_common_ki=colnames(data_common_ki))
-    col.all <<- col_cholera_ki %>% full_join(col_common_ki, by="id") %>% rename(question_header=id)
+    col.all.ki <<- col_cholera_ki %>% full_join(col_common_ki, by="id") %>% rename(question_header=id)
+    print("Column headers from the two Key informant datasets have been consolidated into the dataframe col.all.ki to enable comparison.")
   }
 }
 
@@ -134,24 +160,28 @@ combine.col.all <- function(){
     col_common_hh = data.frame(id=colnames(data_common_hh), col_common_hh=colnames(data_common_hh))
     col_common_ki = data.frame(id=colnames(data_common_ki), col_common_ki=colnames(data_common_ki))
     col.all <<- col_cholera_hh  %>% full_join(col_common_hh, by="id") %>% full_join(col_cholera_ki, by = "id") %>% full_join(col_common_ki, by="id") %>% rename(question_header=id)
+    print("Column headers from all datasets have been consolidated into the dataframe col.all to enable comparison.")
   }
 }
 
 combine.tools <- function(){
-  # hh <- exists("data_cholera_hh") & exists("data_common_hh") 
-  # ki <- exists("data_cholera_ki") & exists("data_common_ki")
-  # cholera_hh <- exists("data_cholera_hh") & !exists("data_common_hh")
-  # cholera_ki <- exists("data_cholera_ki") & !exists("data_common_ki")
-  # common_hh <- !exists("data_cholera_hh") & exists("data_common_hh")
-  # common_ki <- !exists("data_cholera_ki") & exists("data_common_ki")
   if (hh) {
     tool_hh <<- bind_rows(tool_cholera_hh, tool_common_hh) %>% filter(!duplicated(name))
     choices_hh <<- bind_rows(choices_cholera_hh, choices_common_hh) %>% filter(!duplicated(paste0(list_name,name)))}
   if (ki) {
     tool_ki <<- bind_rows(tool_cholera_ki, tool_common_ki) %>% filter(!duplicated(name))
     choices_ki <<- bind_rows(choices_cholera_ki, choices_common_ki) %>% filter(!duplicated(paste0(list_name,name)))}
-  if (cholera.hh) {tool_hh <<- tool_cholera_hh} else if (common.hh) {tool_hh <<- tool_common_hh}
-  if (cholera.ki) {tool_ki <<- tool_cholera_ki} else if (common.ki) {tool_ki <<- tool_common_ki}
+  if (cholera.hh) {
+    tool_hh <<- tool_cholera_hh
+    choices_hh <<- choices_cholera_hh} else if (common.hh) {
+      tool_hh <<- tool_common_hh
+      choices_hh <<- choices_cholera_hh}
+  if (cholera.ki) {
+    tool_ki <<- tool_cholera_ki
+    choices_ki <<- choices_cholera_ki} else if (common.ki) {
+      tool_ki <<- tool_common_ki
+      choices_ki <<- choices_common_ki}
+  print("The tools and choices ")
 }
 
 harmonise.tools <- function(){
