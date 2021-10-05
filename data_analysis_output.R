@@ -9,10 +9,12 @@ today <- Sys.Date()
 ## Install/Load libraries
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(tidyverse, stringr, openxlsx, data.table, lubridate)
-pacman::p_load_gh("mabafaba/hypegrammaR", "mabafaba/reachR")
+pacman::p_load_gh("mabafaba/reachR2")
+pacman::p_load_gh("mabafaba/hypegrammaR")
 
-# devtools::install_github("mabafaba/hypegrammaR", force = T, build_vignettes = T)
-library("hypegrammaR")
+# devtools::install_github("mabafaba/hypegrammaR", force = T, build_vignettes = T, auth_token = "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")
+# remotes::install_github("mabafaba/hypegrammaR")
+
 ## Load sourced function
 source("R/utils.R")
 
@@ -41,11 +43,16 @@ analysis.common.ki.filename <- "data/common_KI_analysis_plan_v1_district.csv"
 
 filename.pcode <- "data/yem_admin_ochayemen_20191002.xlsx"
 
+list.filenames <- grep("filename", ls(), value = T)
+list.filenames <- list.filenames[!grepl("cleaned", list.filenames)]
+list.tools.specified <- grep("hh|ki", unique(gsub("analysis\\.|data\\.|kobo\\.|\\.filename", "", list.filenames)), value = T)
+
 ## load all datasets
 data_hh <- read.xlsx(data.hh.cleaned.filename)
 data_ki <- read.xlsx(data.ki.cleaned.filename)
 
-tools <- c("cholera.hh", "cholera.ki", "common.hh", "common.ki")                # Make sure that the list of tools here match the filenames above
+# tools <- c("cholera.hh", "cholera.ki", "common.hh", "common.ki")                # Make sure that the list of tools here match the filenames above
+tools <- list.tools.specified
 for (t in tools) {
   tool <- gsub("\\.", "_", t)
   assign(paste0("tool_", tool), read.xlsx(paste0("kobo.", t, ".filename") %>% get) %>% mutate_all(as.character))
@@ -66,24 +73,26 @@ choices_ki <- bind_rows(choices_cholera_ki, choices_common_ki) %>% filter(!dupli
 
 ## For all dataset, create as many binary column as choices for all select_one questions 
 # Get the list of all select one columns for all datasets
-for (t in c("hh", "ki")){
+t.list <- gsub("common\\.|cholera\\.", "", list.tools.specified) %>% unique
+for (t in t.list){
   assign(paste0("col.select.one.", t), get(paste0("tool_", t)) %>% filter(grepl("select_one", type)) %>% pull(name))
   assign(paste0("col.select.multiple.", t), get(paste0("tool_", t)) %>% filter(grepl("select_multiple", type)) %>% pull(name))
 }
 
 # For each select one/multiple colum in each dataset, create as many binary columns as choices present in the corresponding kobo tool
 # Can take up to 30 seconds, be patient...
-t <- "hh"
-for (t in c("hh", "ki")){
+for (t in t.list){
   values <- choice.long(get(paste0("choices_", t)), get(paste0("tool_", t))) %>% filter(!name %in% c("g_governorate", "g_district", "g_sub_district"))
   for (col in c(get(paste0("col.select.one.",t)), get(paste0("col.select.multiple.",t)))){
     unique.val <- values %>% filter(name==col) %>% pull(value)
     if (length(unique.val)>0 & (col %in% colnames(get(paste0("data_", t))))){
       for (var in unique.val){
         varname <- paste0(col, ".", var)
-        df <- get(paste0("data_", t)) %>%
-          mutate(!!sym(varname) := ifelse((is.na(!!sym(col)) | (!!sym(col) %in% c(""))), NA, ifelse(grepl(var, !!sym(col)), "1", "0")), .after=col)
-        assign(paste0("data_", t), df)
+        if (!varname %in% colnames(get(paste0("data_", t)))){
+          df <- get(paste0("data_", t)) %>%
+            mutate(!!sym(varname) := ifelse((is.na(!!sym(col)) | (!!sym(col) %in% c(""))), NA, ifelse(grepl(var, !!sym(col)), "1", "0")), .after=col)
+          assign(paste0("data_", t), df)
+          }
       }
     }
   }
@@ -113,7 +122,7 @@ data_hh_anonymised <- data_hh %>% select(-any_of(col.exclude))
 data_ki_anonymised <- data_ki %>% select(-any_of(col.exclude))
 
 ## Rework column title names  for external dataset
-col.select.one <- c(col.select.one.cholera_hh, col.select.one.cholera_ki, col.select.one.common_hh, col.select.one.common_ki) %>% unique
+col.select.one <- c(col.select.one.hh, col.select.one.ki) %>% unique
 col.select.one.binary <- paste0(col.select.one,".")
 
 ## Exclude all the select_one binary columns created for the Indesign data merge to limit column names

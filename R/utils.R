@@ -228,6 +228,15 @@ initialise.deletion.log <- function(){
                    issue = as.character())) 
 }
 
+# checks=check_pcode_sub_final %>% filter(!admin3Pcode %in% c(NA,""))
+# check_id=""
+# question.names=c("g_sub_district")
+# issue="issue"
+# new.value="admin3Pcode"
+# fix="Checked with partner"
+# checked_by="ON"
+# add.col=c("")
+
 cleaning.log.new.entries <- function(checks, check_id, question.names=c(), issue="issue", new.value="" , fix="Checked with partner", checked_by="ON", add.col=c("")){
   df <- initialise.cleaning.log()
   if (nrow(checks)>0){

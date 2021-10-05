@@ -57,6 +57,8 @@ mapply(function(x,y) assign(x,y, .GlobalEnv), names(list_df), list_df)
 
 ## 1.2. Streamline columns names in dataset and imported kobo tool and consolidate common and cholera datset for HH and KI
 ### Note: This section will align column names and choices and create a consolidate dataset (the first function creates data_hh, the second will create data_ki)
+which.tools.loaded()                                                            ## quick function that checks which tool is loaded
+
 harmonise.consolidate.hh()                                                      ## 2. harmonise and consolidate common and cholera HH 
 harmonise.consolidate.ki()                                                      ## 3. harmonise and consolidate common and cholera HH
 # harmonise.and.consolidate.datasets()                                          ## 1. original function that cleans HH and KI at once
@@ -64,8 +66,8 @@ harmonise.consolidate.ki()                                                      
 ################################################################################################
 ## 2. Apply changes from updated cleaning logs
 ################################################################################################
-# tool.type <- "HH"
-tool.type <- "KI"
+tool.type <- "HH"
+# tool.type <- "KI"
 tool <- tolower(tool.type)
 if (tool.type=="HH"){data <- data_hh} else {data <- data_ki}
 
@@ -89,7 +91,9 @@ cleaning.log <- cleaning.log %>% bind_rows(cleanig.log.internal)
 data_cleaned <- data
 for (r in seq_along(1:nrow(cleaning.log))){
   variable <- cleaning.log[r, "variable"]
-  if (variable %in% colnames(data_cleaned)){data_cleaned[data_cleaned$uuid %in% cleaning.log[r, "uuid"], variable] <- cleaning.log[r, "new_value"]}
+  if (variable %in% colnames(data_cleaned)){
+    data_cleaned[data_cleaned$uuid %in% cleaning.log[r, "uuid"], variable] <- cleaning.log[r, "new_value"]
+    }
   }
 
 ## 2.3. Write cleaned datasets

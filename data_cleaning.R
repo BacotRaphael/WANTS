@@ -21,11 +21,12 @@ dir.create("cleaning", showWarnings = F)
 # data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-53-27.xlsx"
 # kobo.common.hh.filename <- "data/Common_HH_tool.xlsx"
 
-data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-39-21.xlsx"
-kobo.cholera.ki.filename <- "data/Cholera_KI_tool.xlsx"
-#
-# data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-38-11.xlsx"
-# kobo.common.ki.filename <- "data/Common_KI_tool.xlsx"
+# data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-39-21.xlsx"
+# kobo.cholera.ki.filename <- "data/Cholera_KI_tool.xlsx"
+
+# data.common.ki.filename <- "data/WASH_WANTS Common_KI_cleandata_2021-08-22.xlsx"
+data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-38-11.xlsx"
+kobo.common.ki.filename <- "data/Common_KI_tool.xlsx"
 
 list.filenames <- grep("filename", ls(), value = T)
 list.tools.specified <- grep("hh|ki", unique(gsub("data\\.|kobo\\.|\\.filename", "", list.filenames)), value = T)
@@ -151,7 +152,7 @@ data <- data %>% filter(!id %in% id.to.delete)                                  
 ## 2.1. Matching pcodes 
 ## A. Sub-district Matching
 ## 2.1.1. Perfect Matching of the district name with arabic and english name
-check_pcode_sub <- data %>% select(col.cl.data[1:4], g_governorate,g_district, g_sub_district) %>%
+check_pcode_sub <- data %>% select(any_of(col.cl.data[1:4]), g_governorate,g_district, g_sub_district) %>%
   mutate(flag=ifelse(!g_sub_district %in% pcodes$admin3Pcode, T, F),
          issue=ifelse(flag,"The value entered is not a valid Pcode.","")) %>%
   left_join(pcodes %>% select(admin3Pcode, admin3RefName_ar) %>% filter(!duplicated(admin3Pcode)), by = c("g_sub_district"="admin3RefName_ar")) %>%
@@ -160,7 +161,7 @@ check_pcode_sub <- data %>% select(col.cl.data[1:4], g_governorate,g_district, g
               setNames(paste0(colnames(.), "_match_en")), by = c("g_sub_district"="admin3RefName_en_match_en")) %>%
   mutate(admin3Pcode = ifelse(is.na(admin3Pcode) & substr(admin3Pcode_match_en, 1, 4) == g_governorate, admin3Pcode_match_en, admin3Pcode)) %>% select(-admin3Pcode_match_en)
 
-## 2.1.2. Partial matching of districtname in arabic
+ ## 2.1.2. Partial matching of districtname in arabic
 check_pcode_sub_2 <- check_pcode_sub %>% filter(is.na(admin3Pcode)) %>%
   mutate(admin3Pcode_match = str_replace_all(g_sub_district, setNames(pcodes$admin3Pcode,pcodes$admin3RefName_ar)),
          admin3Pcode_match = gsub("[\u0621-\u064A]+", "", admin3Pcode), 
@@ -178,15 +179,15 @@ browseURL(paste0("cleaning/unmatched_pcodes_sub_", tool.type, "_", today, ".xlsx
 ## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
 ## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
 # sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_HH_2021-08-01_updated.xlsx"
-sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_KI_2021-08-01_updated.xlsx"
+sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_KI_2021-09-21_updated2.xlsx"
 
 unmatched_pcodes_sub_updated <- read.xlsx(sub.pcode.followup.file.updated) %>%
   mutate(admin3Pcode = ifelse(!is.na(admin3Pcode_final), admin3Pcode_final, "")) 
 
-check_pcode_sub_final <- bind_rows(check_pcode_sub %>% filter(!is.na(admin3Pcode)), 
-                               check_pcode_sub_2 %>% filter(!is.na(admin3Pcode)), 
-                               unmatched_pcodes_sub_updated) %>% select(-admin3Pcode_final, -admin3Pcode_match) %>%
-  setnames(old=col.cl.data, new=col.cl, skip_absent = T) %>% mutate(g_sub_district=area)
+check_pcode_sub_final <- bind_rows(check_pcode_sub %>% filter(!is.na(admin3Pcode)) %>% mutate_all(as.character), 
+                               check_pcode_sub_2 %>% filter(!is.na(admin3Pcode)) %>% mutate_all(as.character), 
+                               unmatched_pcodes_sub_updated %>% mutate_all(as.character)) %>% select(-admin3Pcode_final, -admin3Pcode_match) %>%
+  setnames(old=col.cl.data, new=col.cl, skip_absent = T) %>% mutate(g_sub_district=area, flag=as.logical(flag))
 
 ## Save changes to cleaning log
 ## 1. Internal cleaning log for Pcodes for which we found a match without issue
@@ -312,7 +313,8 @@ if ((s<-nrow(check_shortest_path %>% filter(flag)))==0){print("No enumerators se
 cleaning.log <- cleaning.log %>% bind_rows(check_shortest_path %>% filter(flag) %>% select(all_of(col.cl)) %>% mutate_all(as.character))
 
 ## 2.3. Numerical outliers => ## To be done, separate low and high outliers in the function detect.outliers
-col.num.all <- bind_rows(tool_cholera_hh, tool_cholera_ki, tool_common_hh, tool_common_ki) %>% filter(type=="integer") %>% pull(name)
+# col.num.all <- bind_rows(tool_cholera_hh, tool_cholera_ki, tool_common_hh, tool_common_ki) %>% filter(type=="integer") %>% pull(name)
+col.num.all <- tool %>% filter(type=="integer") %>% pull(name)
 method <- "iqr-log"
 
 check_outliers <- data %>% select(uuid, any_of(col.num.all)) %>%
@@ -435,25 +437,27 @@ add.to.cleaning.log(checks = check_soap_price, check_id = "KI.3", question.names
 
 ## 1. Save main cleaning log [hh or ki depending on tool.type]
 cleaning.log <- cleaning.log %>% mutate(comment="", .after="new_value") %>%
-  left_join(tool_hh %>% select(name, `label::english`, `label::arabic`) %>%
-              setNames(paste0(colnames(.), "_hh")), by = c("variable"="name_hh")) %>%
-  left_join(tool_ki %>% select(name, `label::english`, `label::arabic`) %>%
-              setNames(paste0(colnames(.), "_ki")), by = c("variable"="name_ki"))
-if (tool.type == "HH"){cleaning.log <- cleaning.log %>% select(-matches("_ki"))} else if (tool.type == "KI") {cleaning.log <- cleaning.log %>% select(-matches("_hh"))}
+  left_join(tool %>% select(name, `label::english`, `label::arabic`), by = c("variable"="name_hh")) %>%
+  relocate(matches("label"), .before="old_value")
+  # left_join(tool_hh %>% select(name, `label::english`, `label::arabic`) %>%
+  #             setNames(paste0(colnames(.), "_hh")), by = c("variable"="name_hh")) %>%
+  # left_join(tool_ki %>% select(name, `label::english`, `label::arabic`) %>%
+  #             setNames(paste0(colnames(.), "_ki")), by = c("variable"="name_ki"))
+# if (tool.type == "HH"){cleaning.log <- cleaning.log %>% select(-matches("_ki"))} else if (tool.type == "KI") {cleaning.log <- cleaning.log %>% select(-matches("_hh"))}
 
 tool.lower <- tolower(tool.type)
 save.follow.up.requests(cleaning.log, 
                         choices = choices, 
                         tool = tool, 
                         paste0("./cleaning/WASH_WANTS_", tool.lower, "_cleaning log_",today,".xlsx"))
-# browseURL(paste0("./cleaning/WASH_WANTS_", tool.lower, "_cleaning log_",today,".xlsx"))
+browseURL(paste0("./cleaning/WASH_WANTS_", tool.lower, "_cleaning log_",today,".xlsx"))
 
 ## Save internal cleaning log
 save.follow.up.requests(cleaning.log.internal, 
                         choices = choices, 
                         tool = tool, 
                         paste0("./cleaning/WASH_WANTS_", tool.lower, "_cleaning log_internal_",today,".xlsx"))
-# browseURL(paste0("./cleaning/WASH_WANTS_", tool.lower, "_cleaning log_internal_",today,".xlsx"))
+browseURL(paste0("./cleaning/WASH_WANTS_", tool.lower, "_cleaning log_internal_",today,".xlsx"))
 
 
 ## 2. Split cleaning logs by organisation
