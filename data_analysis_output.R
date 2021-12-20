@@ -204,7 +204,9 @@ questionnaire_hh <- hypegrammaR::load_questionnaire(data_hh, tool_cholera_hh, ch
 dap_hh <- load_analysisplan(analysis.cholera.hh.filename)
 
 # Launch Analysis Script
-analysis_hh <- from_analysisplan_map_to_output(data = data_hh, analysisplan = dap_hh, weighting = NULL, questionnaire = questionnaire_hh, labeled = TRUE)
+analysis_hh <- from_analysisplan_map_to_output(data = data_hh, analysisplan = dap_hh, weighting = NULL, 
+                                               # questionnaire = questionnaire_hh, 
+                                               labeled = TRUE)
 summary.stats.list.hh <- analysis_hh$results                                    # SUMMARY STATS LIST ##
 summarystats_hh <- summary.stats.list.hh %>% resultlist_summary_statistics_as_one_table # SUMMARY STATS LIST FORMATTED
 

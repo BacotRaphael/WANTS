@@ -16,16 +16,16 @@ dir.create("cleaning", showWarnings = F)
 ## Specify filenames and comment the file version you don't need
 
 data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-11-40.xlsx"
-kobo.cholera.hh.filename <- "data/Cholera_HH_tool.xlsx"
+kobo.cholera.hh.filename <- "data/tool_cholera_hh.xlsx"
 
 data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-13-13.xlsx"
-kobo.common.hh.filename <- "data/Common_HH_tool.xlsx"
+kobo.common.hh.filename <- "data/tool_common_hh.xlsx"
 
 data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-20.xlsx"
-kobo.cholera.ki.filename <- "data/Cholera_KI_tool.xlsx"
+kobo.cholera.ki.filename <- "data/tool_cholera_ki.xlsx"
 
 data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-14.xlsx"
-kobo.common.ki.filename <- "data/Common_KI_tool.xlsx"
+kobo.common.ki.filename <- "data/tool_common_ki.xlsx"
 
 list.filenames <- grep("filename", ls(), value = T)
 list.tools.specified <- grep("hh|ki", unique(gsub("data\\.|kobo\\.|\\.filename", "", list.filenames)), value = T)
@@ -131,10 +131,10 @@ view(kept_duplicate_surveys)                                                    
 
 ## Write in the vector below the ids (not UUIDs!) that you want to delete.
 id.to.delete <- c("")
-# id.to.delete <- c("174", "172")
+# id.to.delete <- c("174", "172", "1119")
 id.to.delete <- c(id.to.delete, duplicate_surveys$id[!duplicate_surveys$id %in% kept_duplicate_surveys$id])
 
-if (!is.na(id.to.delete) & sum(!id.to.delete %in% duplicate_surveys$id)>0) stop("The id entered are not corresponding to the duplicates. Do it again!")
+if (length(id.to.delete)>0 & sum(!id.to.delete %in% duplicate_surveys$id)>0) stop("The id entered are not corresponding to the duplicates. Do it again!")
 
 deletion.log <- deletion.log %>%                                                ## add to deletion log
   bind_rows(data %>% filter(id %in% id.to.delete) %>% 
@@ -177,8 +177,8 @@ browseURL(paste0("cleaning/unmatched_pcodes_sub_", tool.type, "_", today, ".xlsx
 
 ## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
 ## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
-# sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_HH_2021-08-01_updated.xlsx"
-sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_KI_2021-09-21_updated2.xlsx"
+
+sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_HH_2021-12-20_updated.xlsx"
 
 unmatched_pcodes_sub_updated <- read.xlsx(sub.pcode.followup.file.updated) %>%
   mutate(admin3Pcode = ifelse(!is.na(admin3Pcode_final), admin3Pcode_final, "")) 
@@ -240,9 +240,8 @@ browseURL(paste0("cleaning/unmatched_pcodes_", tool.type, "_", today, ".xlsx"))
 
 ## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
 ## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
-# pcode.followup.file.updated <- "cleaning/unmatched_pcodes_HH_2021-08-01_updated.xlsx"
-# pcode.followup.file.updated <- "cleaning/unmatched_pcodes_KI_2021-08-01_updated.xlsx"
-pcode.followup.file.updated <- "cleaning/unmatched_pcodes_KI_2021-08-03.xlsx"
+
+pcode.followup.file.updated <- "cleaning/unmatched_pcodes_HH_2021-12-20.xlsx"
 
 unmatched_pcodes_updated <- read.xlsx(pcode.followup.file.updated) %>%
   mutate(admin2Pcode = ifelse(!is.na(admin2Pcode_final), admin2Pcode_final, ""))
@@ -250,7 +249,7 @@ unmatched_pcodes_updated <- read.xlsx(pcode.followup.file.updated) %>%
 check_pcode_final <- bind_rows(check_pcode %>% filter(!admin2Pcode %in% c(NA,"","NA")), 
                                check_pcode_2 %>% filter(!admin2Pcode %in% c(NA,"","NA")), 
                                unmatched_pcodes_updated %>% mutate(admin2Pcode_match=as.character(admin2Pcode_match))) %>% select(-admin2Pcode_final, -admin2Pcode_match) %>%
-  left_join(data %>% select(uuid, g_sub_district), by="uuid") %>%
+  # left_join(data %>% select(uuid, g_sub_district), by="uuid") %>%
   setnames(old=col.cl.data, new=col.cl, skip_absent = T)
 
 ## Save changes to cleaning log
@@ -319,7 +318,7 @@ method <- "iqr-log"
 check_outliers <- data %>% select(uuid, any_of(col.num.all)) %>%
   detect.outliers(., method=method, n.sd=3) %>%                                 # n.sd will calibrate sensitivity of outlier detection. / see utils for other methods
   left_join(data %>% select(any_of(col.cl.data)), by="uuid") %>%
-  mutate(check_id="3", new_value="", fix="Checked with partner", checked_by="ON") %>%
+  mutate(check_id="3", new_value="", fix="Checked with partner", checked_by="ON", issue="value seems too high/too low.") %>%
   setnames(old=col.cl.data, new=col.cl, skip_absent = T) %>% dplyr::select(all_of(col.cl)) %>% mutate_all(as.character)
 if((s <- nrow(check_outliers)) > 0){print(paste0("There are ", s, " numerical outliers detected using ", method, " method for the following variables"))
   print(check_outliers$variable %>% unique)} else {print("No numerical outliers detected.")}
@@ -436,7 +435,7 @@ add.to.cleaning.log(checks = check_soap_price, check_id = "KI.3", question.names
 
 ## 1. Save main cleaning log [hh or ki depending on tool.type]
 cleaning.log <- cleaning.log %>% mutate(comment="", .after="new_value") %>%
-  left_join(tool %>% select(name, `label::english`, `label::arabic`), by = c("variable"="name_hh")) %>%
+  left_join(tool %>% select(name, `label::english`, `label::arabic`), by = c("variable"="name")) %>%
   relocate(matches("label"), .before="old_value")
   # left_join(tool_hh %>% select(name, `label::english`, `label::arabic`) %>%
   #             setNames(paste0(colnames(.), "_hh")), by = c("variable"="name_hh")) %>%

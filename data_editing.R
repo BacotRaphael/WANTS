@@ -14,15 +14,17 @@ pacman::p_load(tidyverse, stringr, openxlsx, data.table, lubridate)
 dir.create("cleaning", showWarnings = F)
 
 ## Specify filenames
-data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-46-21.xlsx"
-data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-39-21.xlsx"
-data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-53-27.xlsx"
-data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-38-11.xlsx"
+data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-11-40.xlsx"
+kobo.cholera.hh.filename <- "data/tool_cholera_hh.xlsx"
 
-kobo.cholera.hh.filename <- "data/Cholera_HH_tool.xlsx"
-kobo.cholera.ki.filename <- "data/Cholera_KI_tool.xlsx"
-kobo.common.hh.filename <- "data/Common_HH_tool.xlsx"
-kobo.common.ki.filename <- "data/Common_KI_tool.xlsx"
+data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-13-13.xlsx"
+kobo.common.hh.filename <- "data/tool_common_hh.xlsx"
+
+data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-20.xlsx"
+kobo.cholera.ki.filename <- "data/tool_cholera_ki.xlsx"
+
+data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-14.xlsx"
+kobo.common.ki.filename <- "data/tool_common_ki.xlsx"
 
 filename.pcode <- "data/yem_admin_ochayemen_20191002.xlsx"
 
@@ -35,9 +37,9 @@ source("R/utils.R")
 ## 1.1. Load all raw datasets
 tools <- c("cholera.hh", "cholera.ki", "common.hh", "common.ki")                # Make sure that the list of tools here match the filenames above
 for (t in tools) {
-  assign(paste0("data_", gsub("\\.", "_", t)), read.xlsx(paste0("data.", t, ".filename") %>% get) %>% mutate_all(as.character))
-  assign(paste0("tool_", gsub("\\.", "_", t)), read.xlsx(paste0("kobo.", t, ".filename") %>% get) %>% mutate_all(as.character))
-  assign(paste0("choices_", gsub("\\.", "_", t)), read.xlsx(paste0("kobo.", t, ".filename") %>% get, sheet = "choices") %>% mutate_all(as.character))
+  assign(paste0("data_", gsub("\\.", "_", t)), read_excel(paste0("data.", t, ".filename") %>% get) %>% mutate_all(as.character))
+  assign(paste0("tool_", gsub("\\.", "_", t)), read_excel(paste0("kobo.", t, ".filename") %>% get) %>% mutate_all(as.character))
+  assign(paste0("choices_", gsub("\\.", "_", t)), read_excel(paste0("kobo.", t, ".filename") %>% get, sheet = "choices") %>% mutate_all(as.character))
 }
 
 pcodes <- read.xlsx(filename.pcode, sheet = "admin3")
@@ -77,12 +79,15 @@ dir.create("cleaning/partners feedback/hh", showWarnings = F)
 dir.create("cleaning/partners feedback/ki", showWarnings = F)
 
 ## Load internal cleaning log
-file.internal.cleaning.log <- "cleaning/WASH_WANTS_hh_cleaning log_internal_2021-08-01.xlsx"
+file.internal.cleaning.log <- "cleaning/WASH_WANTS_hh_cleaning log_internal_2021-12-20.xlsx"
 cleanig.log.internal <- read.xlsx(file.internal.cleaning.log) %>% mutate_all(as.character)
 
 ## Load Partners' external cleaning logs
 updated.cl.files <- list.files(paste0("cleaning/partners feedback/", tool))
 cleaning.log <- lapply(updated.cl.files, function(x) read.xlsx(paste0("cleaning/partners feedback/",tool,"/", x)) %>% mutate_all(as.character)) %>% bind_rows
+
+## if you have only one external cleaning log
+cleaning.log <- read_excel("cleaning/WASH_WANTS_hh_cleaning log_2021-12-20_updated.xlsx")
 
 ## Consolidate intenal and external cleaning logs
 cleaning.log <- cleaning.log %>% bind_rows(cleanig.log.internal)
@@ -90,7 +95,7 @@ cleaning.log <- cleaning.log %>% bind_rows(cleanig.log.internal)
 ## 2.2. Apply changes from cleaning log
 data_cleaned <- data
 for (r in seq_along(1:nrow(cleaning.log))){
-  variable <- cleaning.log[r, "variable"]
+  variable <- cleaning.log[r, "variable"] %>% as.character
   if (variable %in% colnames(data_cleaned)){
     data_cleaned[data_cleaned$uuid %in% cleaning.log[r, "uuid"], variable] <- cleaning.log[r, "new_value"]
     }
