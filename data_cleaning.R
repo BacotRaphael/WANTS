@@ -178,7 +178,7 @@ browseURL(paste0("cleaning/unmatched_pcodes_sub_", tool.type, "_", today, ".xlsx
 ## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
 ## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
 
-sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_HH_2021-12-20_updated.xlsx"
+sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_KI_2021-12-20_updated.xlsx"
 
 unmatched_pcodes_sub_updated <- read.xlsx(sub.pcode.followup.file.updated) %>%
   mutate(admin3Pcode = ifelse(!is.na(admin3Pcode_final), admin3Pcode_final, "")) 
@@ -241,7 +241,7 @@ browseURL(paste0("cleaning/unmatched_pcodes_", tool.type, "_", today, ".xlsx"))
 ## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
 ## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
 
-pcode.followup.file.updated <- "cleaning/unmatched_pcodes_HH_2021-12-20.xlsx"
+pcode.followup.file.updated <- "cleaning/unmatched_pcodes_KI_2021-12-201_updated.xlsx"
 
 unmatched_pcodes_updated <- read.xlsx(pcode.followup.file.updated) %>%
   mutate(admin2Pcode = ifelse(!is.na(admin2Pcode_final), admin2Pcode_final, ""))
@@ -297,6 +297,10 @@ for (r in seq_along(1:nrow(agency_log_internal))){
     data[data$uuid==agency_log_internal[r, "uuid"], var] <- agency_log_internal[r, "new_value"]
   }
 }
+
+## Delete the test survey from ACTED
+## Just for this round, delete later
+data <- data %>% filter(g_enum_name != "TEST")
 
 ## 2.2. Shortest path check 
 C <- 2.5  # parameter to calibrate to determine tool specific NA threshold starting which surveys will be flagged [IQR rule] 
