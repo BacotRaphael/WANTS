@@ -8,24 +8,23 @@ today <- Sys.Date()
 
 ## Install/Load libraries
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(tidyverse, stringr, openxlsx, data.table, lubridate, randomcoloR)
+pacman::p_load(tidyverse, stringr, openxlsx, readxl, data.table, lubridate, randomcoloR)
 
 ## Create directories
 dir.create("cleaning", showWarnings = F)
 
 ## Specify filenames and comment the file version you don't need
 
-# data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-46-21.xlsx"
-# kobo.cholera.hh.filename <- "data/Cholera_HH_tool.xlsx"
+data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-11-40.xlsx"
+kobo.cholera.hh.filename <- "data/Cholera_HH_tool.xlsx"
 
-# data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-53-27.xlsx"
-# kobo.common.hh.filename <- "data/Common_HH_tool.xlsx"
+data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-13-13.xlsx"
+kobo.common.hh.filename <- "data/Common_HH_tool.xlsx"
 
-# data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-39-21.xlsx"
-# kobo.cholera.ki.filename <- "data/Cholera_KI_tool.xlsx"
+data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-20.xlsx"
+kobo.cholera.ki.filename <- "data/Cholera_KI_tool.xlsx"
 
-# data.common.ki.filename <- "data/WASH_WANTS Common_KI_cleandata_2021-08-22.xlsx"
-data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-38-11.xlsx"
+data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-14.xlsx"
 kobo.common.ki.filename <- "data/Common_KI_tool.xlsx"
 
 list.filenames <- grep("filename", ls(), value = T)
@@ -43,9 +42,9 @@ source("R/utils.R")
 # tools <- c("cholera.hh", "cholera.ki", "common.hh", "common.ki")                # Make sure that the list of tools here match the filenames above
 tools <- list.tools.specified
 for (t in tools) {
-  assign(paste0("data_", gsub("\\.", "_", t)), read.xlsx(paste0("data.", t, ".filename") %>% get) %>% mutate_all(as.character))
-  assign(paste0("tool_", gsub("\\.", "_", t)), read.xlsx(paste0("kobo.", t, ".filename") %>% get) %>% mutate_all(as.character))
-  assign(paste0("choices_", gsub("\\.", "_", t)), read.xlsx(paste0("kobo.", t, ".filename") %>% get, sheet = "choices") %>% mutate_all(as.character))
+  assign(paste0("data_", gsub("\\.", "_", t)), read_excel(paste0("data.", t, ".filename") %>% get) %>% mutate_all(as.character))
+  assign(paste0("tool_", gsub("\\.", "_", t)), read_excel(paste0("kobo.", t, ".filename") %>% get) %>% mutate_all(as.character))
+  assign(paste0("choices_", gsub("\\.", "_", t)), read_excel(paste0("kobo.", t, ".filename") %>% get, sheet = "choices") %>% mutate_all(as.character))
 }
 
 # create parameters to tell R which tool are loaded (common.ki, cholera.ki, common.hh, cholera.hh, hh and ki object that are either TRUE or FALSE for harmonisation later on)

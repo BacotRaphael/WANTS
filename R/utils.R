@@ -108,6 +108,7 @@ harmonise.consolidate.hh <- function(){
     
     ## 2.3 Cholera tool - Recoding choices of Question W5.1 How does your household adapt to the lack of water?
     data_cholera_hh <<- data_cholera_hh %>%
+      select(where(~!all(is.na(.)))) %>%                                            # unselect empty columns in case mess happened
       rename(`adapt_lack.further_source`=`adapt_lack.further`,                      # further should be further_source
              `adapt_lack.dangerous_source`=`adapt_lack.dangerous`) %>%              # dangerous should be dangerous_source
       mutate(adapt_lack = gsub("further", "further_source",
@@ -129,7 +130,7 @@ harmonise.consolidate.hh <- function(){
   
   ## Consolidate Common and Cholera datasets together for HH depending on what has been specified
   if (cholera.hh & common.hh){
-    data_hh <<- data_cholera_hh %>% bind_rows(data_common_hh)} else if (cholera.hh & !common.hh) {
+    data_hh <<- data_cholera_hh %>% plyr::rbind.fill(data_common_hh)} else if (cholera.hh & !common.hh) {
       data_hh <<- data_cholera_hh} else if (!cholera.hh & common.hh) {
         data_hh <<- data_common_hh}
   print(paste0("The household data from ", paste(unique(data_hh$tool), collapse=" and ")," tool has been consolidated in the dataframe data_hh"))

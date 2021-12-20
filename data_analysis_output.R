@@ -8,7 +8,7 @@ today <- Sys.Date()
 
 ## Install/Load libraries
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(tidyverse, stringr, openxlsx, data.table, lubridate)
+pacman::p_load(tidyverse, stringr, openxlsx, readxl, data.table, lubridate)
 pacman::p_load_gh("mabafaba/reachR2")
 pacman::p_load_gh("mabafaba/hypegrammaR")
 
@@ -23,18 +23,18 @@ dir.create("analysis", showWarnings = F)
 dir.create("output", showWarnings = F)
 
 ## Specifcy filenames
-# data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-46-21.xlsx"
-# data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-39-21.xlsx"
-# data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_latest_version_-_False_-_2021-07-06-08-53-27.xlsx"
-# data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_latest_version_-_False_-_2021-07-06-08-38-11.xlsx"
+data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-11-40.xlsx"
+data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-20.xlsx"
+data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-13-13.xlsx"
+data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-14.xlsx"
 
-data.hh.cleaned.filename <- "output/data cleaned/data_cleaned_HH_2021-07-29.xlsx"
-data.ki.cleaned.filename <- "output/data cleaned/data_cleaned_KI_2021-07-29.xlsx"
+# data.hh.cleaned.filename <- "output/data cleaned/data_cleaned_HH_2021-07-29.xlsx"
+# data.ki.cleaned.filename <- "output/data cleaned/data_cleaned_KI_2021-07-29.xlsx"
 
-kobo.cholera.hh.filename <- "data/Cholera_HH_tool.xlsx"
-kobo.cholera.ki.filename <- "data/Cholera_KI_tool.xlsx"
-kobo.common.hh.filename <- "data/Common_HH_tool.xlsx"
-kobo.common.ki.filename <- "data/Common_KI_tool.xlsx"
+kobo.cholera.hh.filename <- "data/tool_cholera_hh.xlsx"
+kobo.cholera.ki.filename <- "data/tool_cholera_ki.xlsx"
+kobo.common.hh.filename <- "data/tool_common_hh.xlsx"
+kobo.common.ki.filename <- "data/tool_common_ki.xlsx"
 
 analysis.cholera.hh.filename <- "data/WANTS_hh_cholera_dap.csv"
 analysis.cholera.ki.filename <- "data/cholera_KI_analysis_plan_v1_district.csv"
@@ -48,15 +48,16 @@ list.filenames <- list.filenames[!grepl("cleaned", list.filenames)]
 list.tools.specified <- grep("hh|ki", unique(gsub("analysis\\.|data\\.|kobo\\.|\\.filename", "", list.filenames)), value = T)
 
 ## load all datasets
-data_hh <- read.xlsx(data.hh.cleaned.filename)
-data_ki <- read.xlsx(data.ki.cleaned.filename)
+# data_hh <- read.xlsx(data.hh.cleaned.filename)
+# data_ki <- read.xlsx(data.ki.cleaned.filename)
 
 # tools <- c("cholera.hh", "cholera.ki", "common.hh", "common.ki")                # Make sure that the list of tools here match the filenames above
 tools <- list.tools.specified
 for (t in tools) {
   tool <- gsub("\\.", "_", t)
-  assign(paste0("tool_", tool), read.xlsx(paste0("kobo.", t, ".filename") %>% get) %>% mutate_all(as.character))
-  assign(paste0("choices_", tool), read.xlsx(paste0("kobo.", t, ".filename") %>% get, sheet = "choices") %>% mutate_all(as.character))
+  assign(paste0("data_", tool), read_excel(paste0("data.", t, ".filename") %>% get))
+  assign(paste0("tool_", tool), read_excel(paste0("kobo.", t, ".filename") %>% get) %>% mutate_all(as.character))
+  assign(paste0("choices_", tool), read_excel(paste0("kobo.", t, ".filename") %>% get, sheet = "choices") %>% mutate_all(as.character))
   assign(paste0("analysis_", tool), read.csv(paste0("analysis.", t, ".filename") %>% get) %>% mutate_all(as.character))
 }
 
@@ -65,6 +66,11 @@ pcodes <- read.xlsx(filename.pcode, sheet = "admin3")
 # Consolidates choices and tools from common and cholera
 ## Harmonise the kobo tools following the changes done in column headers in data_cleaning.R
 harmonise.tools()
+
+## If needed harmonise hh and ki dataset together
+which.tools.loaded()
+harmonise.consolidate.hh()                                                      ## 1. harmonise and consolidate common and cholera HH
+harmonise.consolidate.ki()                                                      ## 2. harmonise and consolidate common and cholera HH
 
 tool_hh <- bind_rows(tool_cholera_hh, tool_common_hh) %>% filter(!duplicated(name))
 choices_hh <- bind_rows(choices_cholera_hh, choices_common_hh) %>% filter(!duplicated(paste0(list_name,name)))
