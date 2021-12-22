@@ -1,6 +1,6 @@
 # WANTS WASH monitoring tool - Data Merge Script
 # REACH Yemen  
-# 06/07/2021 - Raphael Bacot - raphael.bacot@reach-initiative.org 
+# 22/12/2021 - Raphael Bacot - raphael.bacot@reach-initiative.org 
 
 rm(list=ls())
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
@@ -23,13 +23,8 @@ dir.create("analysis", showWarnings = F)
 dir.create("output", showWarnings = F)
 
 ## Specifcy filenames
-# data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-11-40.xlsx"
-# data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-20.xlsx"
-# data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-13-13.xlsx"
-# data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-14.xlsx"
-
-data.hh.cleaned.filename <- "output/data cleaned/data_cleaned_choleraHH_2021-12-20.xlsx"
-data.ki.cleaned.filename <- "output/data cleaned/data_cleaned_choleraKI_2021-12-22.xlsx"
+data.hh.cleaned.filename <- "output/data cleaned/data_cleaned_HH_2021-12-22.xlsx"
+data.ki.cleaned.filename <- "output/data cleaned/data_cleaned_KI_2021-12-22.xlsx"
 
 kobo.cholera.hh.filename <- "data/tool_cholera_hh.xlsx"
 kobo.cholera.ki.filename <- "data/tool_cholera_ki.xlsx"
@@ -55,7 +50,6 @@ data_ki <- read.xlsx(data.ki.cleaned.filename)
 tools <- list.tools.specified
 for (t in tools) {
   tool <- gsub("\\.", "_", t)
-  # assign(paste0("data_", tool), read_excel(paste0("data.", t, ".filename") %>% get))
   assign(paste0("tool_", tool), read_excel(paste0("kobo.", t, ".filename") %>% get) %>% mutate_all(as.character))
   assign(paste0("choices_", tool), read_excel(paste0("kobo.", t, ".filename") %>% get, sheet = "choices") %>% mutate_all(as.character))
   assign(paste0("analysis_", tool), read.csv(paste0("analysis.", t, ".filename") %>% get) %>% mutate_all(as.character))
@@ -195,6 +189,8 @@ data_cholera_ki_dashboard %>% write.xlsx(paste0("output/WANTS_data_cholera_ki_da
 source("R/functions.R")
 source("R/from_hyperanalysis_to_datamerge.R")
 
+meta_analysis <- c("g_governorate", "admin1Name_en", "admin1Name_ar","g_district", "admin2Name_en", "admin2Name_ar")
+
 ## 2.1. Analysis for Household level data
 data_hh <- data_hh %>%                                                          # renaming for hypergrammar
   setnames(old=c("_index","data_uuid"), new=c("index","uuid"), skip_absent = T)
@@ -226,7 +222,7 @@ agency.cols <- paste0("g_enum_agency_", 1:ncol_agency)
 data_hh_append <- data_hh %>% group_by(g_district) %>% dplyr::select(g_governorate, g_enum_agency, date_survey) %>%
   mutate(date_survey=lubridate::floor_date(as.Date(date_survey, format="%Y-%m-%d"), "month")) %>%
   dplyr::summarise_all(~paste(unique(.), collapse = " ")) %>% 
-  mutate(date_survey=str_split(date_survey, " ")[[1]],
+  mutate(date_survey=str_split(date_survey, " ")[[1]][1],
          month = lubridate::month(as.POSIXlt(date_survey, format="%Y-%m-%d"), label=T),
          year = lubridate::year(as.POSIXlt(date_survey, format="%Y-%m-%d")))
 for (i in seq_along(1:length(agency.cols))){                                    # mutate as many agency columns as agency per district
@@ -236,9 +232,9 @@ data_hh_append <- data_hh_append %>% select(-g_enum_agency) %>%
 
 ## Get arabic gov, dis + left_join by district => do the same for KI data
 final_melted_analysis_hh <- melted_analysis_hh %>%
-  left_join(pcodes %>% select(admin2Pcode, any_of(metacol)), by = c("district_name"="admin2Pcode")) %>%
+  left_join(pcodes %>% select(-matches("admin3")) %>% distinct() %>% select(admin2Pcode, any_of(meta_analysis)), by = c("district_name"="admin2Pcode")) %>%
   left_join(data_hh_append, by=c("district_name"="g_district")) %>%
-  select(any_of(metacol), any_of(colnames(data_hh_append)), everything())
+  select(any_of(meta_analysis), any_of(colnames(data_hh_append)), everything())
 
 final_melted_analysis_hh_ar <- final_melted_analysis_hh %>% mutate_if(is.numeric, number.to.arabic)
 
@@ -277,7 +273,7 @@ agency.cols <- paste0("g_enum_agency_", 1:ncol_agency)
 data_ki_append <- data_ki %>% group_by(g_district) %>% dplyr::select(g_governorate, g_enum_agency, date_survey) %>%
   mutate(date_survey=lubridate::floor_date(as.Date(date_survey, format="%Y-%m-%d"), "month")) %>%
   dplyr::summarise_all(~paste(unique(.), collapse = " ")) %>% 
-  mutate(date_survey=str_split(date_survey, " ")[[1]],
+  mutate(date_survey=str_split(date_survey, " ")[[1]][1],
          month = lubridate::month(as.POSIXlt(date_survey, format="%Y-%m-%d"), label=T),
          year = lubridate::year(as.POSIXlt(date_survey, format="%Y-%m-%d")))
 for (i in seq_along(1:length(agency.cols))){                                    # mutate as many agency columns as agency per district
@@ -287,9 +283,9 @@ data_ki_append <- data_ki_append %>% select(-g_enum_agency) %>%
 
 ## Get arabic gov, dis + left_join by district => do the same for KI data
 final_melted_analysis_ki <- melted_analysis_ki %>%
-  left_join(pcodes %>% select(-matches("admin3")) %>% distinct() %>% select(admin2Pcode, any_of(metacol)), by = c("district_name"="admin2Pcode")) %>%
+  left_join(pcodes %>% select(-matches("admin3")) %>% distinct() %>% select(admin2Pcode, any_of(meta_analysis)), by = c("district_name"="admin2Pcode")) %>%
   left_join(data_ki_append, by=c("district_name"="g_district")) %>%
-  select(any_of(metacol), any_of(colnames(data_ki_append)), everything())
+  select(any_of(meta_analysis), any_of(colnames(data_ki_append)), everything())
 
 final_melted_analysis_ki_ar <- final_melted_analysis_ki %>% mutate_if(is.numeric, number.to.arabic)
 
@@ -321,4 +317,6 @@ write.xlsx(final_melted_analysis_ki_ar, paste0("analysis/KI_common_analysis_fina
 #     }
 #   }
 # }
-  
+
+
+

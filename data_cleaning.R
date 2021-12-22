@@ -1,6 +1,6 @@
 # WANTS WASH monitoring tool - Data Cleaning Script
 # REACH Yemen  
-# 27/07/2021 - Raphael Bacot - raphael.bacot@reach-initiative.org 
+# 22/12/2021 - Raphael Bacot - raphael.bacot@reach-initiative.org 
 
 rm(list=ls())
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
@@ -84,8 +84,8 @@ combine.tools()
 ################################################################################################
 
 ## If all type of tools are loaded, precise which tool are you cleaning (uncomment the relevant one)
-# tool.type <- "HH"
-tool.type <- "KI"
+tool.type <- "HH"
+# tool.type <- "KI"
 
 ## Rename data, tool and choices with corresponding version
 if (tool.type=="HH"){
@@ -131,7 +131,7 @@ view(kept_duplicate_surveys)                                                    
 
 ## Write in the vector below the ids (not UUIDs!) that you want to delete.
 id.to.delete <- c("")
-# id.to.delete <- c("174", "172", "1119")
+id.to.delete <- c("174", "172", "1119")
 id.to.delete <- c(id.to.delete, duplicate_surveys$id[!duplicate_surveys$id %in% kept_duplicate_surveys$id])
 
 if (length(id.to.delete)>0 & sum(!id.to.delete %in% duplicate_surveys$id)>0) stop("The id entered are not corresponding to the duplicates. Do it again!")
@@ -178,7 +178,8 @@ browseURL(paste0("cleaning/unmatched_pcodes_sub_", tool.type, "_", today, ".xlsx
 ## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
 ## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
 
-sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_KI_2021-12-20_updated.xlsx"
+# sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_KI_2021-12-22_updated.xlsx"
+sub.pcode.followup.file.updated <- "cleaning/unmatched_pcodes_sub_HH_2021-12-22_updated.xlsx"
 
 unmatched_pcodes_sub_updated <- read.xlsx(sub.pcode.followup.file.updated) %>%
   mutate(admin3Pcode = ifelse(!is.na(admin3Pcode_final), admin3Pcode_final, "")) 
@@ -189,15 +190,19 @@ check_pcode_sub_final <- bind_rows(check_pcode_sub %>% filter(!is.na(admin3Pcode
   setnames(old=col.cl.data, new=col.cl, skip_absent = T) %>% mutate(g_sub_district=area, flag=as.logical(flag))
 
 ## Change whenever relevant admin2 and admi1 level accordingly
-check.admin2 <- check_pcode_sub_final %>% filter(flag, !is.na(admin3Pcode)) %>%
-  mutate(admin2Pcode = substr(admin3Pcode, 1, 6))
+check.admin <- check_pcode_sub_final %>% filter(flag, !is.na(admin3Pcode)) %>%
+  mutate(admin2Pcode = substr(admin3Pcode, 1, 6), admin1Pcode = substr(admin3Pcode, 1, 4))
 
 ## Save changes to cleaning log
 ## 1. Internal cleaning log for Pcodes for which we found a match without issue
 internal_pcode_sub_log <- cleaning.log.new.entries(check_pcode_sub_final %>% filter(!admin3Pcode %in% c(NA,"")),
                                                check_id = "1", question.names = "g_sub_district", new.value = "admin3Pcode")
-internal_pcode_sub_adm2_log <- cleaning.log.new.entries(check.admin2 %>% filter(!admin3Pcode %in% c(NA,"")),
-                                                        check_id = "1", question.names = "g_district", new.value = "admin2Pcode")
+internal_pcode_sub_adm2_log <- cleaning.log.new.entries(check.admin %>% filter(!admin3Pcode %in% c(NA,""), admin2Pcode != g_district),
+                                                        check_id = "1", question.names = "g_district", new.value = "admin2Pcode") %>%
+  mutate(issue="The district entered doesn't match corrected sub-district.")
+internal_pcode_sub_adm1_log <- cleaning.log.new.entries(check.admin %>% filter(!admin3Pcode %in% c(NA,""), admin1Pcode != g_governorate),
+                                                        check_id = "1", question.names = "g_governorate", new.value = "admin1Pcode") %>%
+  mutate(issue="The governorate entered doesn't match corrected sub-district.")
 
 cleaning.log.internal <- cleaning.log.internal %>% bind_rows(internal_pcode_sub_log) %>% bind_rows(internal_pcode_sub_adm2_log)
 
@@ -248,7 +253,8 @@ browseURL(paste0("cleaning/unmatched_pcodes_", tool.type, "_", today, ".xlsx"))
 ## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
 ## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
 
-pcode.followup.file.updated <- "cleaning/unmatched_pcodes_KI_2021-12-22_updated.xlsx"
+# pcode.followup.file.updated <- "cleaning/unmatched_pcodes_KI_2021-12-22_updated.xlsx"
+pcode.followup.file.updated <- "cleaning/unmatched_pcodes_HH_2021-12-22_updated.xlsx"
 
 unmatched_pcodes_updated <- read.xlsx(pcode.followup.file.updated) %>%
   mutate(admin2Pcode = ifelse(!is.na(admin2Pcode_final), admin2Pcode_final, ""))
@@ -262,7 +268,7 @@ check_pcode_final <- bind_rows(check_pcode %>% filter(!admin2Pcode %in% c(NA,"",
 ## Save changes to cleaning log
 ## 1. Internal cleaning log for Pcodes for which we found a match without issue
 internal_pcode_log <- cleaning.log.new.entries(check_pcode_final %>% filter(!is.na(admin2Pcode)),
-                                                 check_id = "1", question.names = "g_district", new.value = "admin2Pcode")
+                                               check_id = "1", question.names = "g_district", new.value = "admin2Pcode")
 cleaning.log.internal <- cleaning.log.internal %>% bind_rows(internal_pcode_log)
 
 ## 2. External cleaning log when no match has been found

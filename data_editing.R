@@ -1,6 +1,6 @@
 # WANTS WASH monitoring tool - Data Cleaning Script
 # REACH Yemen  
-# 27/07/2021 - Raphael Bacot - raphael.bacot@reach-initiative.org 
+# 22/12/2021 - Raphael Bacot - raphael.bacot@reach-initiative.org 
 
 rm(list=ls())
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
@@ -80,6 +80,7 @@ dir.create("cleaning/partners feedback/ki", showWarnings = F)
 
 ## Load internal cleaning log
 file.internal.cleaning.log <- "cleaning/WASH_WANTS_ki_cleaning log_internal_2021-12-22.xlsx"
+# file.internal.cleaning.log <- "cleaning/WASH_WANTS_hh_cleaning log_internal_2021-12-22.xlsx"
 cleanig.log.internal <- read.xlsx(file.internal.cleaning.log) %>% mutate_all(as.character)
 
 ## Load Partners' external cleaning logs
@@ -88,6 +89,7 @@ cleaning.log <- lapply(updated.cl.files, function(x) read.xlsx(paste0("cleaning/
 
 ## If all external cleaning log are already consolidated:
 cleaning.log <- read_excel("cleaning/WASH_WANTS_ki_cleaning log_2021-12-22_updated.xlsx")
+# cleaning.log <- read_excel("cleaning/WASH_WANTS_hh_cleaning log_2021-12-20_updated.xlsx")
 
 ## Consolidate intenal and external cleaning logs
 cleaning.log <- cleaning.log %>% bind_rows(cleanig.log.internal)
@@ -101,11 +103,17 @@ for (r in seq_along(1:nrow(cleaning.log))){
     }
   }
 
+## delete test surveys (to be deleted later, just for this round)
+data_cleaned <- data_cleaned %>% 
+  filter(!if_any(any_of(c("g_district", "g_sub_district")), ~. %in% c("NA", NA, ""))) %>% # filter out NA district or subdistricts
+  filter(!str_detect(g_enum_last_name, "TEST")) %>% # filter out test surveys 
+  filter(if_all(all_of(c("g_district", "g_sub_district")), ~ str_detect(., "YE") & str_detect(., "\\d"))) %>% # filter out district/sub district with no valid pcode       
+  mutate(g_governorate = ifelse(g_governorate != substr(g_sub_district,1,4), substr(g_sub_district,1,4), g_governorate),
+         g_district = ifelse(g_district != substr(g_sub_district,1,6), substr(g_sub_district,1,6), g_district))
+  
 ## 2.3. Write cleaned datasets
 dir.create("output/data cleaned", showWarnings = F)
 data_cleaned %>% write.xlsx(paste0("output/data cleaned/data_cleaned_", tool.type, "_", today, ".xlsx"), overwrite = T)
 data_cleaned %>% filter(tool == "common") %>% write.xlsx(paste0("output/data cleaned/data_cleaned_common_", tool.type, "_", today, ".xlsx"), overwrite = T)
 data_cleaned %>% filter(tool == "cholera") %>% write.xlsx(paste0("output/data cleaned/data_cleaned_cholera_", tool.type, "_", today, ".xlsx"), overwrite = T)
-
-
 
