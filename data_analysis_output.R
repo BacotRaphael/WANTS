@@ -23,13 +23,13 @@ dir.create("analysis", showWarnings = F)
 dir.create("output", showWarnings = F)
 
 ## Specifcy filenames
-data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-11-40.xlsx"
-data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-20.xlsx"
-data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-13-13.xlsx"
-data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-14.xlsx"
+# data.cholera.hh.filename <- "data/WANTS_Cholera_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-11-40.xlsx"
+# data.cholera.ki.filename <- "data/WASH_Cholera_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-20.xlsx"
+# data.common.hh.filename <- "data/WANTS_Common_HH_-_REACH_Yemen_-_all_versions_-_False_-_2021-12-20-16-13-13.xlsx"
+# data.common.ki.filename <- "data/WASH_Common_Key_Informant_Questionnaire_-_all_versions_-_False_-_2021-12-20-16-13-14.xlsx"
 
-# data.hh.cleaned.filename <- "output/data cleaned/data_cleaned_HH_2021-07-29.xlsx"
-# data.ki.cleaned.filename <- "output/data cleaned/data_cleaned_KI_2021-07-29.xlsx"
+data.hh.cleaned.filename <- "output/data cleaned/data_cleaned_choleraHH_2021-12-20.xlsx"
+data.ki.cleaned.filename <- "output/data cleaned/data_cleaned_choleraKI_2021-12-22.xlsx"
 
 kobo.cholera.hh.filename <- "data/tool_cholera_hh.xlsx"
 kobo.cholera.ki.filename <- "data/tool_cholera_ki.xlsx"
@@ -48,14 +48,14 @@ list.filenames <- list.filenames[!grepl("cleaned", list.filenames)]
 list.tools.specified <- grep("hh|ki", unique(gsub("analysis\\.|data\\.|kobo\\.|\\.filename", "", list.filenames)), value = T)
 
 ## load all datasets
-# data_hh <- read.xlsx(data.hh.cleaned.filename)
-# data_ki <- read.xlsx(data.ki.cleaned.filename)
+data_hh <- read.xlsx(data.hh.cleaned.filename)
+data_ki <- read.xlsx(data.ki.cleaned.filename)
 
 # tools <- c("cholera.hh", "cholera.ki", "common.hh", "common.ki")                # Make sure that the list of tools here match the filenames above
 tools <- list.tools.specified
 for (t in tools) {
   tool <- gsub("\\.", "_", t)
-  assign(paste0("data_", tool), read_excel(paste0("data.", t, ".filename") %>% get))
+  # assign(paste0("data_", tool), read_excel(paste0("data.", t, ".filename") %>% get))
   assign(paste0("tool_", tool), read_excel(paste0("kobo.", t, ".filename") %>% get) %>% mutate_all(as.character))
   assign(paste0("choices_", tool), read_excel(paste0("kobo.", t, ".filename") %>% get, sheet = "choices") %>% mutate_all(as.character))
   assign(paste0("analysis_", tool), read.csv(paste0("analysis.", t, ".filename") %>% get) %>% mutate_all(as.character))
@@ -69,8 +69,8 @@ harmonise.tools()
 
 ## If needed harmonise hh and ki dataset together
 which.tools.loaded()
-harmonise.consolidate.hh()                                                      ## 1. harmonise and consolidate common and cholera HH
-harmonise.consolidate.ki()                                                      ## 2. harmonise and consolidate common and cholera HH
+# harmonise.consolidate.hh()                                                      ## 1. harmonise and consolidate common and cholera HH
+# harmonise.consolidate.ki()                                                      ## 2. harmonise and consolidate common and cholera HH
 
 tool_hh <- bind_rows(tool_cholera_hh, tool_common_hh) %>% filter(!duplicated(name))
 choices_hh <- bind_rows(choices_cholera_hh, choices_common_hh) %>% filter(!duplicated(paste0(list_name,name)))
@@ -216,7 +216,8 @@ melted_analysis_hh <- summarystats_hh %>%                                       
   dplyr::select(-se, -min, -max, -repeat.var, -repeat.var.value, -independent.var) %>%
   pivot_wider(names_from = c("dependent.var", "dependent.var.value"), 
               values_from = "numbers") %>%
-  mutate_all(~ifelse(is.na(.), 0, .)) %>%                                       # at district level, assume that each question gets at least one answer => NA should be 0
+  filter(!is.na(district_name)) %>%
+  mutate(across(-c("district_name"), ~ifelse(is.na(.), 0, .))) %>%                                       # at district level, assume that each question gets at least one answer => NA should be 0
   mutate_if(is.numeric, ~round(.*100, 4))                                       # multiply by 100 to get percentages
 
 ## join sample size, enumerator agency, governorate, month, year

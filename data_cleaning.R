@@ -151,7 +151,7 @@ data <- data %>% filter(!id %in% id.to.delete)                                  
 ## 2.1. Matching pcodes 
 ## A. Sub-district Matching
 ## 2.1.1. Perfect Matching of the district name with arabic and english name
-check_pcode_sub <- data %>% select(any_of(col.cl.data[1:4]), g_governorate,g_district, g_sub_district) %>%
+check_pcode_sub <- data %>% select(any_of(col.cl.data[1:4]), g_governorate, g_district, g_sub_district) %>%
   mutate(flag=ifelse(!g_sub_district %in% pcodes$admin3Pcode, T, F),
          issue=ifelse(flag,"The value entered is not a valid Pcode.","")) %>%
   left_join(pcodes %>% select(admin3Pcode, admin3RefName_ar) %>% filter(!duplicated(admin3Pcode)), by = c("g_sub_district"="admin3RefName_ar")) %>%

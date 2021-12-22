@@ -68,8 +68,8 @@ harmonise.consolidate.ki()                                                      
 ################################################################################################
 ## 2. Apply changes from updated cleaning logs
 ################################################################################################
-tool.type <- "HH"
-# tool.type <- "KI"
+# tool.type <- "HH"
+tool.type <- "KI"
 tool <- tolower(tool.type)
 if (tool.type=="HH"){data <- data_hh} else {data <- data_ki}
 
@@ -79,15 +79,15 @@ dir.create("cleaning/partners feedback/hh", showWarnings = F)
 dir.create("cleaning/partners feedback/ki", showWarnings = F)
 
 ## Load internal cleaning log
-file.internal.cleaning.log <- "cleaning/WASH_WANTS_hh_cleaning log_internal_2021-12-20.xlsx"
+file.internal.cleaning.log <- "cleaning/WASH_WANTS_ki_cleaning log_internal_2021-12-22.xlsx"
 cleanig.log.internal <- read.xlsx(file.internal.cleaning.log) %>% mutate_all(as.character)
 
 ## Load Partners' external cleaning logs
 updated.cl.files <- list.files(paste0("cleaning/partners feedback/", tool))
 cleaning.log <- lapply(updated.cl.files, function(x) read.xlsx(paste0("cleaning/partners feedback/",tool,"/", x)) %>% mutate_all(as.character)) %>% bind_rows
 
-## if you have only one external cleaning log
-cleaning.log <- read_excel("cleaning/WASH_WANTS_hh_cleaning log_2021-12-20_updated.xlsx")
+## If all external cleaning log are already consolidated:
+cleaning.log <- read_excel("cleaning/WASH_WANTS_ki_cleaning log_2021-12-22_updated.xlsx")
 
 ## Consolidate intenal and external cleaning logs
 cleaning.log <- cleaning.log %>% bind_rows(cleanig.log.internal)
@@ -104,8 +104,8 @@ for (r in seq_along(1:nrow(cleaning.log))){
 ## 2.3. Write cleaned datasets
 dir.create("output/data cleaned", showWarnings = F)
 data_cleaned %>% write.xlsx(paste0("output/data cleaned/data_cleaned_", tool.type, "_", today, ".xlsx"))
-data_cleaned %>% filter(tool == "common") %>% write.xlsx(paste0("output/data cleaned/data_cleaned_common", tool.type, "_", today, ".xlsx"))
-data_cleaned %>% filter(tool == "cholera") %>% write.xlsx(paste0("output/data cleaned/data_cleaned_cholera", tool.type, "_", today, ".xlsx"))
+data_cleaned %>% filter(tool == "common") %>% write.xlsx(paste0("output/data cleaned/data_cleaned_common_", tool.type, "_", today, ".xlsx"))
+data_cleaned %>% filter(tool == "cholera") %>% write.xlsx(paste0("output/data cleaned/data_cleaned_cholera_", tool.type, "_", today, ".xlsx"))
 
 
 
