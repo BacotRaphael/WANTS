@@ -166,29 +166,29 @@ data_ki_ext_labels_ar <- data_ki_ext %>% # In case column names needed in arabic
 colnames(data_ki_ext_labels_ar)[is.na(colnames(data_ki_ext_labels_ar))] <- colnames(data_ki_ext)[is.na(colnames(data_ki_ext_labels_ar))]
 
 ## Export all cleaned dataset for InDesign
-data_hh_anonymised %>% write.xlsx(paste0("output/WANTS_data_hh_inDesign", today, ".xlsx"))
-data_ki_anonymised %>% write.xlsx(paste0("output/WANTS_data_ki_inDesign", today, ".xlsx"))
+data_hh_anonymised %>% write.xlsx(paste0("output/WANTS_data_hh_inDesign", today, ".xlsx"), overwrite = T)
+data_ki_anonymised %>% write.xlsx(paste0("output/WANTS_data_ki_inDesign", today, ".xlsx"), overwrite = T)
   
 ## Export all cleaned dataset in xml and labels - Not for inDesign
-data_hh_ext %>% write.xlsx(paste0("output/WANTS_data_hh_xml_", today,".xlsx"))
-data_hh_ext_labels %>% write.xlsx(paste0("output/WANTS_data_hh_labels_", today,".xlsx"))
-data_hh_ext_labels_ar %>% write.xlsx(paste0("output/WANTS_data_hh_labels_ar_", today,".xlsx"))
+data_hh_ext %>% write.xlsx(paste0("output/WANTS_data_hh_xml_", today,".xlsx"), overwrite = T)
+data_hh_ext_labels %>% write.xlsx(paste0("output/WANTS_data_hh_labels_", today,".xlsx"), overwrite = T)
+data_hh_ext_labels_ar %>% write.xlsx(paste0("output/WANTS_data_hh_labels_ar_", today,".xlsx"), overwrite = T)
 
-data_ki_ext %>% write.xlsx(paste0("output/WANTS_data_ki_xml_", today,".xlsx"))
-data_ki_ext_labels %>% write.xlsx(paste0("output/WANTS_data_ki_labels_", today,".xlsx"))
-data_ki_ext_labels_ar %>% write.xlsx(paste0("output/WANTS_data_ki_labels_ar_", today,".xlsx"))
+data_ki_ext %>% write.xlsx(paste0("output/WANTS_data_ki_xml_", today,".xlsx"), overwrite = T)
+data_ki_ext_labels %>% write.xlsx(paste0("output/WANTS_data_ki_labels_", today,".xlsx"), overwrite = T)
+data_ki_ext_labels_ar %>% write.xlsx(paste0("output/WANTS_data_ki_labels_ar_", today,".xlsx"), overwrite = T)
 
 ## Split Common and CHolera for HH and KI and export it with the relevant name for PBI
 
 data_common_hh_dashboard <- data_hh_ext %>% filter(tool=="common")
-data_common_hh_dashboard %>% write.xlsx(paste0("output/WANTS_data_common_hh_dashboard_", today, ".xlsx"))
+data_common_hh_dashboard %>% write.xlsx(paste0("output/WANTS_data_common_hh_dashboard_", today, ".xlsx"), overwrite = T)
 data_cholera_hh_dashboard <- data_hh_ext %>% filter(tool=="common")
-data_cholera_hh_dashboard %>% write.xlsx(paste0("output/WANTS_data_cholera_hh_dashboard_", today, ".xlsx"))
+data_cholera_hh_dashboard %>% write.xlsx(paste0("output/WANTS_data_cholera_hh_dashboard_", today, ".xlsx"), overwrite = T)
 
 data_common_ki_dashboard <- data_ki_ext %>% filter(tool=="common")
-data_common_ki_dashboard %>% write.xlsx(paste0("output/WANTS_data_common_ki_dashboard_", today, ".xlsx"))
+data_common_ki_dashboard %>% write.xlsx(paste0("output/WANTS_data_common_ki_dashboard_", today, ".xlsx"), overwrite = T)
 data_cholera_ki_dashboard <- data_ki_ext %>% filter(tool=="common")
-data_cholera_ki_dashboard %>% write.xlsx(paste0("output/WANTS_data_cholera_ki_dashboard_", today, ".xlsx"))
+data_cholera_ki_dashboard %>% write.xlsx(paste0("output/WANTS_data_cholera_ki_dashboard_", today, ".xlsx"), overwrite = T)
 
 ### 2. Analysis
 ## 2.0 Load needed functions
@@ -243,27 +243,32 @@ final_melted_analysis_hh <- melted_analysis_hh %>%
 final_melted_analysis_hh_ar <- final_melted_analysis_hh %>% mutate_if(is.numeric, number.to.arabic)
 
 # write.xlsx(summarystats_hh, paste0("analysis/HH_common_summarystats_final_",today,".xlsx"))
-write.xlsx(final_melted_analysis_hh, paste0("analysis/HH_common_analysis_final_",today,".xlsx"))
-write.xlsx(final_melted_analysis_hh_ar, paste0("analysis/HH_common_analysis_final_ar",today,".xlsx"))
+write.xlsx(final_melted_analysis_hh, paste0("analysis/HH_common_analysis_final_",today,".xlsx"), overwrite = T)
+write.xlsx(final_melted_analysis_hh_ar, paste0("analysis/HH_common_analysis_final_ar",today,".xlsx"), overwrite = T)
 
 ## 2.2. Analysis for KII level data
-data_ki <- data_ki %>% setnames(old=c("_index","data_uuid"), new=c("index","uuid"), skip_absent = T)
+data_ki <- data_ki %>% setnames(old=c("_index","data_uuid"), new=c("index","uuid"), skip_absent = T) %>%
+  rename_with(~gsub("/", "__", .), everything())
 
 # Load questionnaire and Data Analysis Plan
 questionnaire_ki <- hypegrammaR::load_questionnaire(data_ki, tool_cholera_ki, choices_cholera_ki, choices.label.column.to.use = "name")
-dap_ki <- load_analysisplan(analysis.cholera.ki.filename)
+dap_ki <- load_analysisplan(analysis.cholera.ki.filename) %>%
+  mutate(dependent.variable = gsub("/", "__", dependent.variable))
 
 # Launch Analysis Script
-analysis_ki <- from_analysisplan_map_to_output(data = data_ki, analysisplan = dap_ki, weighting = NULL, questionnaire = questionnaire_ki, labeled = TRUE)
+analysis_ki <- from_analysisplan_map_to_output(data = data_ki, analysisplan = dap_ki, weighting = NULL, 
+                                               # questionnaire = questionnaire_ki, 
+                                               labeled = TRUE)
 summary.stats.list.ki <- analysis_ki$results                                    # SUMMARY STATS LIST ##
-summarystats_ki <- summary.stats.list.ki %>% resultlist_summary_statistics_as_one_table # SUMMARY STATS LIST FORMATTED 
+summarystats_ki <- lapply(summary.stats.list.ki, function(x) x$summary.statistic) %>% bind_rows
 
 melted_analysis_ki <- summarystats_ki %>%
   dplyr::rename(district_name=independent.var.value) %>%
   dplyr::select(-se, -min, -max, -repeat.var, -repeat.var.value, -independent.var) %>%
   pivot_wider(names_from = c("dependent.var", "dependent.var.value"), 
               values_from = "numbers") %>%
-  mutate_all(~ifelse(is.na(.), 0, .)) %>%                                       # at district level, assume that each question gets at least one answer => NA should be 0
+  filter(!is.na(district_name)) %>%
+  mutate(across(-c("district_name"), ~ifelse(is.na(.), 0, .))) %>%
   mutate_if(~is.numeric(.), ~round(.*100, 4))                                       # multiply by 100 to get percentages
 
 ## join sample size, enumerator agency, governorate, month, year
@@ -282,15 +287,15 @@ data_ki_append <- data_ki_append %>% select(-g_enum_agency) %>%
 
 ## Get arabic gov, dis + left_join by district => do the same for KI data
 final_melted_analysis_ki <- melted_analysis_ki %>%
-  left_join(pcodes %>% select(admin2Pcode, any_of(metacol)), by = c("district_name"="admin2Pcode")) %>%
+  left_join(pcodes %>% select(-matches("admin3")) %>% distinct() %>% select(admin2Pcode, any_of(metacol)), by = c("district_name"="admin2Pcode")) %>%
   left_join(data_ki_append, by=c("district_name"="g_district")) %>%
   select(any_of(metacol), any_of(colnames(data_ki_append)), everything())
 
 final_melted_analysis_ki_ar <- final_melted_analysis_ki %>% mutate_if(is.numeric, number.to.arabic)
 
-write.xlsx(summarystats_ki, paste0("analysis/KI_common_summarystats_final_",today,".xlsx"))
-write.xlsx(final_melted_analysis_ki, paste0("analysis/KI_common_analysis_final_",today,".xlsx"))
-write.xlsx(final_melted_analysis_ki_ar, paste0("analysis/KI_common_analysis_final_ar",today,".xlsx"))
+# write.xlsx(summarystats_ki, paste0("analysis/KI_common_summarystats_final_", today, ".xlsx"), overwrite = T)
+write.xlsx(final_melted_analysis_ki, paste0("analysis/KI_common_analysis_final_", today, ".xlsx"), overwrite = T)
+write.xlsx(final_melted_analysis_ki_ar, paste0("analysis/KI_common_analysis_final_ar", today, ".xlsx"), overwrite = T)
 
 # Archived code
 

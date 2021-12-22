@@ -188,11 +188,18 @@ check_pcode_sub_final <- bind_rows(check_pcode_sub %>% filter(!is.na(admin3Pcode
                                unmatched_pcodes_sub_updated %>% mutate_all(as.character)) %>% select(-admin3Pcode_final, -admin3Pcode_match) %>%
   setnames(old=col.cl.data, new=col.cl, skip_absent = T) %>% mutate(g_sub_district=area, flag=as.logical(flag))
 
+## Change whenever relevant admin2 and admi1 level accordingly
+check.admin2 <- check_pcode_sub_final %>% filter(flag, !is.na(admin3Pcode)) %>%
+  mutate(admin2Pcode = substr(admin3Pcode, 1, 6))
+
 ## Save changes to cleaning log
 ## 1. Internal cleaning log for Pcodes for which we found a match without issue
 internal_pcode_sub_log <- cleaning.log.new.entries(check_pcode_sub_final %>% filter(!admin3Pcode %in% c(NA,"")),
                                                check_id = "1", question.names = "g_sub_district", new.value = "admin3Pcode")
-cleaning.log.internal <- cleaning.log.internal %>% bind_rows(internal_pcode_sub_log)
+internal_pcode_sub_adm2_log <- cleaning.log.new.entries(check.admin2 %>% filter(!admin3Pcode %in% c(NA,"")),
+                                                        check_id = "1", question.names = "g_district", new.value = "admin2Pcode")
+
+cleaning.log.internal <- cleaning.log.internal %>% bind_rows(internal_pcode_sub_log) %>% bind_rows(internal_pcode_sub_adm2_log)
 
 ## 2. External cleaning log when no match has been found
 add.to.cleaning.log(check_pcode_sub_final %>% filter(admin3Pcode %in% (c(NA,""))),
@@ -241,7 +248,7 @@ browseURL(paste0("cleaning/unmatched_pcodes_", tool.type, "_", today, ".xlsx"))
 ## Manually update the Pcode using the second sheet with the pcode list (usually, partial matching of arabic names with ctr + F works)
 ## Rename the updated file with _updated at the end (make sure that the filename belows matches your saved updated file)
 
-pcode.followup.file.updated <- "cleaning/unmatched_pcodes_KI_2021-12-201_updated.xlsx"
+pcode.followup.file.updated <- "cleaning/unmatched_pcodes_KI_2021-12-22_updated.xlsx"
 
 unmatched_pcodes_updated <- read.xlsx(pcode.followup.file.updated) %>%
   mutate(admin2Pcode = ifelse(!is.na(admin2Pcode_final), admin2Pcode_final, ""))

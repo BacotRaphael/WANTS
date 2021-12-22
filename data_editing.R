@@ -103,9 +103,9 @@ for (r in seq_along(1:nrow(cleaning.log))){
 
 ## 2.3. Write cleaned datasets
 dir.create("output/data cleaned", showWarnings = F)
-data_cleaned %>% write.xlsx(paste0("output/data cleaned/data_cleaned_", tool.type, "_", today, ".xlsx"))
-data_cleaned %>% filter(tool == "common") %>% write.xlsx(paste0("output/data cleaned/data_cleaned_common_", tool.type, "_", today, ".xlsx"))
-data_cleaned %>% filter(tool == "cholera") %>% write.xlsx(paste0("output/data cleaned/data_cleaned_cholera_", tool.type, "_", today, ".xlsx"))
+data_cleaned %>% write.xlsx(paste0("output/data cleaned/data_cleaned_", tool.type, "_", today, ".xlsx"), overwrite = T)
+data_cleaned %>% filter(tool == "common") %>% write.xlsx(paste0("output/data cleaned/data_cleaned_common_", tool.type, "_", today, ".xlsx"), overwrite = T)
+data_cleaned %>% filter(tool == "cholera") %>% write.xlsx(paste0("output/data cleaned/data_cleaned_cholera_", tool.type, "_", today, ".xlsx"), overwrite = T)
 
 
 
